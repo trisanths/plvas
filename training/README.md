@@ -375,7 +375,17 @@ uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
 ```
 
 The visual trainer selects checkpoints only on the screen-native synthetic
-validation split. It evaluates both the frozen input checkpoint and the final
+validation split. A frozen seed is evaluated on that split before epoch 1,
+persisted as the epoch `-1` incumbent, and copied to `safety-best.pt`; a worse
+first epoch therefore cannot displace it. Selection uses a constrained
+high-water rule rather than a raw lexicographic tuple: meaningful secret-recall
+gains must stay within per-class/aggregate recall and precision regression
+bounds; sub-0.01 secret gains require a real other-sensitive recall gain; and
+precision can break a tie only with no recall regression. Missing or non-finite
+all-class metrics abort the attempt while the previous committed epoch remains
+safe. The full per-class state is replayed and verified on schema-3 resume.
+
+The trainer evaluates both the frozen input checkpoint and the final
 safety-selected checkpoint on the untouched published WebPII test split. When
 the verified ATS supplement is present, it also evaluates both checkpoints on
 the identity-disjoint 200-image ATS test split. Those test metrics are written
@@ -384,51 +394,87 @@ to separate manifest blocks and never participate in checkpoint selection.
 `visual-train` runs on an H200. Before Ultralytics starts, it validates the
 composed source contracts and copies WebPII, screen-native synthetic data, and
 the optional ATS supplement from the Modal Volume to container-local ephemeral
-disk with 16 bounded copy workers. Training and every evaluation then use only
-those verified local paths. The immutable Volume provenance is persisted under
-`visual/training/` as `staged-dataset.yaml`, `staged-source-manifest.json`, and
+disk with 64 bounded I/O workers on the 16-CPU H200 container. Every source and
+destination file is still hashed and the complete source/target tree inventory
+is verified; the configured worker count is recorded in the staging manifest.
+Training and evaluation then use only those verified local paths. The immutable
+Volume provenance is persisted inside the selected attempt root as
+`staged-dataset.yaml`, `staged-source-manifest.json`, and
 `dataset-staging-manifest.json`.
 
-After every model-save callback, training atomically writes
-`safety-selection-progress.json` with the last, aggregate-best, and PLVA
-safety-best checkpoint hashes, then commits the Volume. Ultralytics is invoked
-with `save=True` and `save_period=1`, so completed epochs are durable if the
-container is preempted.
+New training attempts disable `optimizer=auto` and record an immutable
+`stable-adamw-v1` policy: AdamW, `lr0=0.0005`, `lrf=0.1`, beta1/momentum `0.9`,
+weight decay `0.0005`, one warmup epoch, warmup momentum `0.8`, zero bias warmup
+LR, cosine decay, and `nbs=64`. Existing loss, conservative screenshot
+augmentation, AMP, and gradient clipping remain unchanged. The manifest also
+records a manual monitoring policy: review/stop after two consecutive epochs
+with an absolute mAP50 drop over 0.10 or validation classification loss over 2x
+the seed; automatic stopping is intentionally disabled.
 
-After an interrupted visual run has stopped, resume the same run ID with the
-original total epoch count (100 for the default full schedule):
+After every model-save callback, training atomically writes schema-3
+`safety-selection-progress.json` with full per-class selection state and the
+last, aggregate-best, and PLVA safety-best checkpoint hashes, then commits the
+Volume. Ultralytics is invoked with `save=True` and `save_period=1`, so completed
+epochs are durable if the container is preempted.
+
+Start the stable v3 retry as a new named, non-resume attempt. The snapshot path
+is confined to `/vol/snapshots`, its caller-pinned SHA-256 is checked before and
+after copying, and path/hash/license/inherited provenance are persisted under
+`visual/training-stable/`. The existing `visual/training/` attempt is never
+deleted or overwritten:
 
 ```bash
 uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
   --stage visual-train \
-  --run-id <same-run-id> \
-  --visual-epochs 100 \
+  --run-id plva-visual-agpl-ats-v3 \
+  --visual-attempt stable \
+  --visual-seed-checkpoint snapshots/2026-07-11-plva-visual-agpl-ats-v3-epoch2-safety/aggregate-best-epoch2.pt \
+  --visual-seed-sha256 123e6d1d2129a8ba72eec9d736410b1d1b8f910319f987395dc4b12c4132d7bb \
+  --visual-epochs 40
+```
+
+After an interrupted stable attempt has stopped, resume the same attempt with
+the original total epoch count:
+
+```bash
+uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
+  --stage visual-train \
+  --run-id plva-visual-agpl-ats-v3 \
+  --visual-attempt stable \
+  --visual-epochs 40 \
   --visual-resume
 ```
 
-Resume loads only that run's hash-validated persisted `last.pt` and passes
+Resume loads only that attempt's hash-validated persisted `last.pt` and passes
 `resume=True` to Ultralytics, restoring optimizer/scaler/EMA state and deriving
-the scheduler position from the saved epoch. It also restores PLVA's complete
-safety-selection history and best tuple. The run ID, staged dataset/source
-manifests, class contract, original epoch total, augmentation policy, and all
-progress checkpoint hashes must match; `--visual-resume` cannot be combined
-with `--force`. The local entrypoint launches long visual training with
-`.spawn().get()`.
+the scheduler position from the saved epoch. It also replays PLVA's seed
+incumbent and complete constrained safety-selection history. The run ID,
+attempt ID/root, frozen seed hash, attempt provenance, staged dataset/source
+manifests, class contract, original epoch total, optimizer and augmentation
+policies, and all progress checkpoint hashes must match. Named attempts cannot
+be force-deleted, and resume cannot replace the frozen seed. The local
+entrypoint launches long visual training with `.spawn().get()`.
 
 This resume code is baked into a newly launched Modal image. It does not modify
 or hot-patch an already-built running container, so do not issue the resume
 command while the current job is still active; use it only for a future
 relaunch after that job has exited or been preempted.
 
-The active `plva-visual-agpl-ats-v3` run uses a 40-epoch schedule, so its exact
-recovery command is:
+The earlier `visual/training/` v3 attempt used auto-selected MuSGD and is
+intentionally stopped. Its old schema-1/2 progress is incompatible with the
+stable optimizer/selection contract and must not be resumed. Export and
+download the stable attempt explicitly after it completes:
 
 ```bash
-uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
-  --stage visual-train \
+uvx --from modal==1.5.2 modal run training/modal_app.py \
+  --stage visual-export \
   --run-id plva-visual-agpl-ats-v3 \
-  --visual-epochs 40 \
-  --visual-resume
+  --visual-attempt stable
+
+uvx --from modal==1.5.2 modal run training/modal_app.py \
+  --stage visual-download \
+  --run-id plva-visual-agpl-ats-v3 \
+  --visual-attempt stable
 ```
 
 ## Tests

@@ -327,6 +327,11 @@ class DetectorEvaluationContractTests(unittest.TestCase):
             Path(__file__).resolve().parents[1] / "modal_app.py"
         ).read_text(encoding="utf-8")
         self.assertIn("visual_resume: bool = False", modal_source)
+        self.assertIn('visual_attempt: str = "default"', modal_source)
+        self.assertIn('visual_seed_checkpoint: str = ""', modal_source)
+        self.assertIn('visual_seed_sha256: str = ""', modal_source)
+        self.assertIn("attempt_output_dir(paths[\"root\"], attempt_id)", modal_source)
+        self.assertIn("copy_workers=VISUAL_STAGE_COPY_WORKERS", modal_source)
         self.assertIn("resume: bool = False", modal_source)
         self.assertIn("visual_train_remote.spawn(", modal_source)
         self.assertIn("result[\"visual_train\"] = visual_call.get()", modal_source)

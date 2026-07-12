@@ -1010,9 +1010,11 @@ def main(
         raise ValueError("--visual-resume and --force are mutually exclusive")
     if visual_resume and stage != "visual-train":
         raise ValueError("--visual-resume is valid only with --stage visual-train")
-    if visual_seed_checkpoint and stage != "visual-train":
+    if (
+        visual_seed_checkpoint or visual_seed_sha256 or visual_seed_provenance
+    ) and stage != "visual-train":
         raise ValueError(
-            "--visual-seed-checkpoint is valid only with --stage visual-train"
+            "visual seed options are valid only with --stage visual-train"
         )
     seed_provenance_json = (
         Path(visual_seed_provenance).read_text(encoding="utf-8")
