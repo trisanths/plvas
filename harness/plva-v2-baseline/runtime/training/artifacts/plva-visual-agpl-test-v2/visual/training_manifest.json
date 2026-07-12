@@ -1,0 +1,325 @@
+{
+  "base_checkpoint": {
+    "license": "AGPL-3.0-only",
+    "path": "/vol/runs/plva-visual-agpl-test-v2/inputs/detector-base.pt",
+    "sha256": "0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1",
+    "source": {
+      "mode": "user-supplied-override",
+      "path": "/vol/runs/plva-visual-agpl-test-v2/inputs/detector-base.pt"
+    }
+  },
+  "best_checkpoint": {
+    "path": "safety-best.pt",
+    "score": [
+      0.0,
+      0.8314391650069002,
+      0.851985215573751
+    ],
+    "sha256": "251cded66a14c63625f26689a5e8f5bcda0cfd80769c9d6f2e78c865aff9f827"
+  },
+  "created_at": "2026-07-11T22:40:22.897143+00:00",
+  "data": {
+    "source_manifest": "/vol/runs/plva-visual-agpl-test-v2/visual/dataset/manifest.json",
+    "source_manifest_sha256": "d32fc5db03dda6194f4f852bb1824055e1879623629064df6a62fd4b4692c7da",
+    "yaml": "/vol/runs/plva-visual-agpl-test-v2/visual/dataset/dataset.yaml",
+    "yaml_sha256": "bf3105ef64d90add2e1b64628c7d3f3194aea99fbc7b94e31d3099c2aaccb881"
+  },
+  "distribution": {
+    "closed_source_release_allowed": false,
+    "commercial_license_approved": false,
+    "mode": "agpl-development"
+  },
+  "environment": {
+    "cuda_available": true,
+    "device": "0",
+    "torch": "2.13.0+cu130",
+    "ultralytics": "8.4.92"
+  },
+  "history": [
+    {
+      "epoch": 0,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.5608198924731183,
+      "precision_mean": 0.0023518831975887964,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    },
+    {
+      "epoch": 1,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.40209620224204984,
+      "precision_mean": 0.16747202514106807,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 2,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.40714605734767023,
+      "precision_mean": 0.4431575242428566,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 3,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.30879818052451075,
+      "precision_mean": 0.4124134783166248,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 4,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.4964926489924825,
+      "precision_mean": 0.4621582802492823,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 5,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.46020191878563144,
+      "precision_mean": 0.5117007974604094,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 6,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.6871353809196981,
+      "precision_mean": 0.5255650388617157,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    },
+    {
+      "epoch": 7,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.6458821765924283,
+      "precision_mean": 0.7502142520910012,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 8,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.7142989868160025,
+      "precision_mean": 0.7363716870589675,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    },
+    {
+      "epoch": 9,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.6665434576294903,
+      "precision_mean": 0.5771267945232448,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 10,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.6099332702599098,
+      "precision_mean": 0.540080308449325,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 11,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.6422081267121585,
+      "precision_mean": 0.7358389304833035,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 12,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.6210642453406042,
+      "precision_mean": 0.7938225574816417,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 13,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.7573431081278885,
+      "precision_mean": 0.8322942936616506,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    },
+    {
+      "epoch": 14,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.777771341217414,
+      "precision_mean": 0.7110446368347831,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    },
+    {
+      "epoch": 15,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.8031616700452159,
+      "precision_mean": 0.6711493651045345,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    },
+    {
+      "epoch": 16,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.7428137802318283,
+      "precision_mean": 0.7777277793761707,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 17,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.8181167278389502,
+      "precision_mean": 0.8461245608469574,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    },
+    {
+      "epoch": 18,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.8072680924081915,
+      "precision_mean": 0.8341954376715538,
+      "secret_recall_minimum": 0.0,
+      "selected": false
+    },
+    {
+      "epoch": 19,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "non_secret_recall_mean": 0.8314391650069002,
+      "precision_mean": 0.851985215573751,
+      "secret_recall_minimum": 0.0,
+      "selected": true
+    }
+  ],
+  "publication_blockers": [
+    "cross-runtime ONNX parity not yet proven",
+    "AGPL development output cannot ship in a closed-source product; obtain an Ultralytics Enterprise license",
+    "WebPII and base-checkpoint license obligations require review"
+  ],
+  "schema_version": 1,
+  "selected_checkpoint_evaluation": {
+    "aggregate": {
+      "fitness": 0.7849747432675703,
+      "metrics/mAP50(B)": 0.9533289619800489,
+      "metrics/mAP50-95(B)": 0.7849747432675703,
+      "metrics/precision(B)": 0.9584300958121376,
+      "metrics/recall(B)": 0.8735707081100219
+    },
+    "minimum_secret_class_recall": 0.0,
+    "missing_validation_classes": [
+      "SENSITIVE_IMAGE"
+    ],
+    "per_class": {
+      "ADDRESS": {
+        "precision": 0.9810675218698028,
+        "recall": 1.0
+      },
+      "CARD_NUMBER": {
+        "precision": 0.9739551775745209,
+        "recall": 1.0
+      },
+      "CVC": {
+        "precision": 1.0,
+        "recall": 0.0
+      },
+      "EMAIL": {
+        "precision": 0.9841387617297949,
+        "recall": 1.0
+      },
+      "NAME": {
+        "precision": 0.9398169856125478,
+        "recall": 0.9968199627712206
+      },
+      "PHONE": {
+        "precision": 0.9953546089144791,
+        "recall": 1.0
+      },
+      "SECRET": {
+        "precision": 0.7931077107959549,
+        "recall": 1.0
+      },
+      "SENSITIVE_FIELD": {
+        "precision": 1.0,
+        "recall": 0.9917457021089543
+      },
+      "SENSITIVE_IMAGE": {
+        "precision": 0.0,
+        "recall": 0.0
+      }
+    }
+  },
+  "selection_order": [
+    "minimum-secret-class-recall",
+    "mean-non-secret-recall",
+    "mean-precision"
+  ],
+  "status": "trained-unpublished",
+  "train_results": {
+    "fitness": 0.7849747432675703,
+    "metrics/mAP50(B)": 0.9533289619800489,
+    "metrics/mAP50-95(B)": 0.7849747432675703,
+    "metrics/precision(B)": 0.9584300958121376,
+    "metrics/recall(B)": 0.8735707081100219
+  },
+  "training_config": {
+    "batch_size": 16,
+    "epochs": 20,
+    "image_size": 640,
+    "patience": 6,
+    "seed": 1311,
+    "workers": 8
+  },
+  "ultralytics_default_best_results": {
+    "fitness": 0.8032852978110862,
+    "metrics/mAP50(B)": 0.9476641654569945,
+    "metrics/mAP50-95(B)": 0.8032852978110862,
+    "metrics/precision(B)": 0.9496984622876065,
+    "metrics/recall(B)": 0.8588618151116685
+  }
+}

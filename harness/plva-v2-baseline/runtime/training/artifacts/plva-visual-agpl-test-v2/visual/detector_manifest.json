@@ -1,0 +1,109 @@
+{
+  "artifact": {
+    "bytes": 10428657,
+    "format": "onnx",
+    "input": {
+      "dtype": "float32",
+      "dynamic_axes": [
+        "batch",
+        "height",
+        "width"
+      ],
+      "layout": "NCHW",
+      "name": "images"
+    },
+    "opset": 17,
+    "path": "detector.onnx",
+    "sha256": "450ee07452d618eb3159d565f1787b17a8cabbfee3e72686e932460be576cc2e"
+  },
+  "created_at": "2026-07-11T22:40:59.071172+00:00",
+  "publication_blockers": [
+    "cross-runtime ONNX parity not yet proven",
+    "AGPL development output cannot ship in a closed-source product; obtain an Ultralytics Enterprise license",
+    "WebPII and base-checkpoint license obligations require review",
+    "selected checkpoint does not meet the zero-secret-miss gate"
+  ],
+  "release_eligible": false,
+  "schema_version": 1,
+  "source": {
+    "license": "AGPL-3.0-only",
+    "path": "/vol/runs/plva-visual-agpl-test-v2/visual/training/safety-best.pt",
+    "sha256": "251cded66a14c63625f26689a5e8f5bcda0cfd80769c9d6f2e78c865aff9f827"
+  },
+  "status": "trained-unpublished",
+  "training": {
+    "distribution": {
+      "closed_source_release_allowed": false,
+      "commercial_license_approved": false,
+      "mode": "agpl-development"
+    },
+    "epochs": 20,
+    "metrics": {
+      "fitness": 0.7849747432675703,
+      "metrics/mAP50(B)": 0.9533289619800489,
+      "metrics/mAP50-95(B)": 0.7849747432675703,
+      "metrics/precision(B)": 0.9584300958121376,
+      "metrics/recall(B)": 0.8735707081100219
+    },
+    "selected_checkpoint_evaluation": {
+      "aggregate": {
+        "fitness": 0.7849747432675703,
+        "metrics/mAP50(B)": 0.9533289619800489,
+        "metrics/mAP50-95(B)": 0.7849747432675703,
+        "metrics/precision(B)": 0.9584300958121376,
+        "metrics/recall(B)": 0.8735707081100219
+      },
+      "minimum_secret_class_recall": 0.0,
+      "missing_validation_classes": [
+        "SENSITIVE_IMAGE"
+      ],
+      "per_class": {
+        "ADDRESS": {
+          "precision": 0.9810675218698028,
+          "recall": 1.0
+        },
+        "CARD_NUMBER": {
+          "precision": 0.9739551775745209,
+          "recall": 1.0
+        },
+        "CVC": {
+          "precision": 1.0,
+          "recall": 0.0
+        },
+        "EMAIL": {
+          "precision": 0.9841387617297949,
+          "recall": 1.0
+        },
+        "NAME": {
+          "precision": 0.9398169856125478,
+          "recall": 0.9968199627712206
+        },
+        "PHONE": {
+          "precision": 0.9953546089144791,
+          "recall": 1.0
+        },
+        "SECRET": {
+          "precision": 0.7931077107959549,
+          "recall": 1.0
+        },
+        "SENSITIVE_FIELD": {
+          "precision": 1.0,
+          "recall": 0.9917457021089543
+        },
+        "SENSITIVE_IMAGE": {
+          "precision": 0.0,
+          "recall": 0.0
+        }
+      }
+    },
+    "selection": [
+      0.0,
+      0.8314391650069002,
+      0.851985215573751
+    ]
+  },
+  "training_manifest": {
+    "path": "/vol/runs/plva-visual-agpl-test-v2/visual/training/training_manifest.json",
+    "sha256": "c91d071ff79dbdb5f914e13119c9d0eb83e30fd2cdfada26215ad408382bdbe0"
+  }
+}

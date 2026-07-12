@@ -1,0 +1,19 @@
+{
+  "artifact_manifest": "detector_manifest.json",
+  "created_at": "2026-07-11T22:40:59.071172+00:00",
+  "deterministic_export": {
+    "protobuf_serialization": "deterministic",
+    "torch_threads": 1,
+    "volatile_metadata_removed": [
+      "date"
+    ]
+  },
+  "model_card": "MODEL_CARD.md",
+  "output": "detector.onnx",
+  "output_sha256": "450ee07452d618eb3159d565f1787b17a8cabbfee3e72686e932460be576cc2e",
+  "schema_version": 1,
+  "source": "/vol/runs/plva-visual-agpl-test-v2/visual/training/safety-best.pt",
+  "source_license": "AGPL-3.0-only",
+  "source_sha256": "251cded66a14c63625f26689a5e8f5bcda0cfd80769c9d6f2e78c865aff9f827",
+  "status": "exported"
+}
