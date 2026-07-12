@@ -13,6 +13,14 @@ VOLUME_NAME = "plva-model-engineering"
 CACHE_VOLUME_NAME = "plva-hf-cache"
 REMOTE_ROOT = Path("/vol/runs")
 VISUAL_STAGE_COPY_WORKERS = 64
+VISUAL_TRAIN_GPU = "L4"
+VISUAL_TRAIN_CPUS = 16.0
+VISUAL_TRAIN_MEMORY_MIB = 32768
+VISUAL_DATALOADER_WORKERS = 16
+VISUAL_TRAIN_BATCH_SIZE = 64
+VISUAL_TRAIN_DEFAULT_EPOCHS = 40
+VISUAL_TRAIN_TIMEOUT_SECONDS = 24 * 60 * 60
+VISUAL_TRAIN_SOFT_DEADLINE_SECONDS = 22 * 60 * 60
 LOCAL_TRAINING_DIR = Path(__file__).resolve().parent
 LOCAL_REPO_ROOT = LOCAL_TRAINING_DIR.parent
 
@@ -436,6 +444,7 @@ def visual_prepare_remote(
         WEBPII_REVISION,
         prepare as prepare_webpii,
     )
+    from training.visual.stage_training_dataset import publish_verified_tree
     from training.visual.stage_supplemental import stage_prepared_supplemental
 
     paths = run_paths(run_id)
@@ -493,26 +502,48 @@ def visual_prepare_remote(
     for name in ("visual_webpii", "visual_synthetic", "visual_dataset"):
         if force and paths[name].exists():
             shutil.rmtree(paths[name])
+    local_prepare_root = Path("/tmp/plva-visual-prepare") / validate_run_id(run_id)
+    if local_prepare_root.exists():
+        shutil.rmtree(local_prepare_root)
+    local_webpii = local_prepare_root / "webpii"
+    local_synthetic = local_prepare_root / "synthetic"
     webpii = prepare_webpii(
         argparse.Namespace(
-            output_dir=paths["visual_webpii"],
+            output_dir=local_webpii,
             max_train=500 if quick else None,
             max_test=100 if quick else None,
             metadata_only=False,
             fail_on_unmapped=True,
-            download_workers=12,
+            download_workers=32,
             force=force,
         )
     )
     synthetic = prepare_synthetic(
         argparse.Namespace(
-            output_dir=paths["visual_synthetic"],
+            output_dir=local_synthetic,
             train_records=1_000 if quick else 20_000,
             validation_records=250 if quick else 4_000,
             seed=1311,
             force=force,
         )
     )
+    for local_root, durable_root in (
+        (local_webpii, paths["visual_webpii"]),
+        (local_synthetic, paths["visual_synthetic"]),
+    ):
+        yaml_path = local_root / "dataset.yaml"
+        yaml_path.write_text(
+            yaml_path.read_text(encoding="utf-8").replace(
+                str(local_root.resolve()), str(durable_root.resolve()), 1
+            ),
+            encoding="utf-8",
+        )
+        publish_verified_tree(
+            local_root,
+            durable_root,
+            force=force,
+            copy_workers=VISUAL_STAGE_COPY_WORKERS,
+        )
     composed = compose(
         argparse.Namespace(
             webpii_root=paths["visual_webpii"],
@@ -578,10 +609,84 @@ def visual_audit_remote(run_id: str) -> dict[str, Any]:
 
 @app.function(
     image=visual_image,
-    gpu="H200",
-    cpu=16.0,
-    memory=65536,
-    timeout=24 * 60 * 60,
+    cpu=VISUAL_TRAIN_CPUS,
+    memory=VISUAL_TRAIN_MEMORY_MIB,
+    timeout=3 * 60 * 60,
+    volumes={"/vol": run_volume},
+)
+def visual_selection_audit_remote(run_id: str) -> dict[str, Any]:
+    """Verify the train-derived calibration/guard/replay contract without a GPU."""
+    import shutil
+
+    from training.visual.build_replay_train_list import (
+        materialize_replay_training_stage,
+    )
+    from training.visual.stage_training_dataset import stage_composed_dataset
+
+    paths = run_paths(run_id)
+    output = Path("/tmp/plva-runtime-selection-audit") / validate_run_id(run_id)
+    shutil.rmtree(output, ignore_errors=True)
+    source_roots = {
+        "webpii": paths["visual_webpii"],
+        "synthetic": paths["visual_synthetic"],
+        "supplemental_ats": paths["visual_supplemental"],
+    }
+    print("selection audit: copying and verifying source trees", flush=True)
+    staged = stage_composed_dataset(
+        paths["visual_dataset"] / "dataset.yaml",
+        paths["visual_dataset"] / "manifest.json",
+        source_roots,
+        output / "local-stage",
+        force=True,
+        copy_workers=VISUAL_STAGE_COPY_WORKERS,
+    )
+    print("selection audit: building partitions and replay contract", flush=True)
+    staged = materialize_replay_training_stage(
+        staged,
+        seed=1311,
+        batch_size=VISUAL_TRAIN_BATCH_SIZE,
+        runtime_selection=True,
+    )
+    selection = staged["runtime_selection"]
+    replay = staged["replay"]
+    print("selection audit: contract validation complete", flush=True)
+    return {
+        "selection_contract_sha256": selection["contract_file_sha256"],
+        "selection_contract": selection["immutable_inputs"],
+        "webpii_partition": {
+            "calibration": selection["webpii"]["statistics"]["calibration"],
+            "guard": selection["webpii"]["statistics"]["guard"],
+            "eligible": selection["webpii"]["statistics"]["eligible"],
+        },
+        "synthetic_partition": {
+            "calibration": selection["synthetic"]["calibration"],
+            "guard": selection["synthetic"]["guard"],
+        },
+        "replay": {
+            "manifest_sha256": replay["manifest_sha256"],
+            "records": replay["output"]["records"],
+            "source_counts": replay["selected"]["source_counts"],
+            "unique_images_by_source": replay["selected"][
+                "unique_images_by_source"
+            ],
+            "selection_holdout_images": replay["original"][
+                "selection_holdout_images"
+            ],
+        },
+        "published_test_used": False,
+    }
+
+
+@app.function(
+    image=visual_image,
+    gpu=VISUAL_TRAIN_GPU,
+    cpu=VISUAL_TRAIN_CPUS,
+    memory=VISUAL_TRAIN_MEMORY_MIB,
+    timeout=VISUAL_TRAIN_TIMEOUT_SECONDS,
+    max_containers=1,
+    buffer_containers=0,
+    scaledown_window=2,
+    retries=0,
     volumes={"/vol": run_volume, "/cache": cache_volume},
 )
 def visual_train_remote(
@@ -598,9 +703,13 @@ def visual_train_remote(
 ) -> dict[str, Any]:
     import argparse
     import shutil
+    import time
 
     from training.locked_asset import ensure_locked_training_asset
     from training.schema import sha256_file
+    from training.visual.build_replay_train_list import (
+        materialize_replay_training_stage,
+    )
     from training.visual.stage_training_dataset import (
         persist_stage_metadata,
         stage_composed_dataset,
@@ -613,7 +722,9 @@ def visual_train_remote(
         initialize_seeded_attempt,
         load_seeded_attempt,
         resolve_frozen_seed,
+        seeded_attempt_start_mode,
         validate_attempt_id,
+        validate_seeded_attempt_invocation,
     )
 
     if resume and force:
@@ -629,9 +740,14 @@ def visual_train_remote(
         raise ValueError("a new named visual attempt requires a frozen seed checkpoint")
     if bool(seed_checkpoint) != bool(seed_sha256):
         raise ValueError("visual seed checkpoint and SHA-256 must be supplied together")
-    if resume:
-        # A newly launched resume container must see the latest per-epoch commit.
+    selected_epochs = epochs or (2 if quick else VISUAL_TRAIN_DEFAULT_EPOCHS)
+    if not 1 <= selected_epochs <= 500:
+        raise ValueError("visual epochs must be between 1 and 500")
+    if resume or attempt_id != DEFAULT_ATTEMPT_ID:
+        # Named-attempt recovery and normal resume must see the latest committed
+        # immutable contract/progress, even when Modal reuses a warm container.
         run_volume.reload()
+    deadline_monotonic = time.monotonic() + VISUAL_TRAIN_SOFT_DEADLINE_SECONDS
     paths = run_paths(run_id)
     attempt_root = attempt_output_dir(paths["root"], attempt_id)
     checkpoint = paths["inputs"] / "detector-base.pt"
@@ -641,18 +757,15 @@ def visual_train_remote(
         raise RuntimeError("visual-prepare stage has not completed")
     preserved_provenance: dict[str, Any] | None = None
     attempt_contract: dict[str, Any] | None = None
+    attempt_needs_initialization = False
+    pre_epoch_recovery = False
+    effective_resume = resume
+    declared_seed_provenance: dict[str, Any] | None = None
+    resolved_seed: Path | None = None
     if attempt_id != DEFAULT_ATTEMPT_ID:
         if license_path.is_symlink() or not license_path.is_file():
             raise RuntimeError("named visual attempt requires the detector license input")
-        if resume:
-            attempt_contract = load_seeded_attempt(
-                attempt_root=attempt_root,
-                run_id=run_id,
-                attempt_id=attempt_id,
-                optimizer_policy=STABLE_OPTIMIZER_POLICY,
-                license_path=license_path,
-            )
-        else:
+        if not resume:
             try:
                 declared_seed_provenance = (
                     json.loads(seed_provenance_json)
@@ -666,33 +779,48 @@ def visual_train_remote(
                 raise RuntimeError("visual seed provenance must be valid JSON") from exc
             if not isinstance(declared_seed_provenance, dict):
                 raise RuntimeError("visual seed provenance must be a JSON object")
-            attempt_contract = initialize_seeded_attempt(
+            resolved_seed = resolve_frozen_seed(seed_checkpoint)
+        if attempt_root.exists():
+            attempt_contract = load_seeded_attempt(
                 attempt_root=attempt_root,
                 run_id=run_id,
                 attempt_id=attempt_id,
-                source_checkpoint=resolve_frozen_seed(seed_checkpoint),
-                expected_sha256=seed_sha256,
-                seed_provenance=declared_seed_provenance,
                 optimizer_policy=STABLE_OPTIMIZER_POLICY,
                 license_path=license_path,
-                inherited_provenance_path=(
-                    provenance_path if provenance_path.exists() else None
-                ),
             )
-            # Preserve the immutable seed and attempt contract before the long
-            # Volume-to-local dataset copy begins.
-            run_volume.commit()
-        checkpoint = Path(attempt_contract["checkpoint"])
-        base_source = {
-            "mode": "frozen-seed-training-attempt",
-            "attempt_id": attempt_id,
-            "attempt_manifest": str(attempt_contract["manifest_path"]),
-            "attempt_manifest_sha256": attempt_contract["manifest_sha256"],
-            "checkpoint_sha256": attempt_contract["checkpoint_sha256"],
-            "provenance": attempt_contract["provenance"],
-            "provenance_path": str(attempt_contract["provenance_path"]),
-            "provenance_sha256": attempt_contract["provenance_sha256"],
-        }
+            start_mode = seeded_attempt_start_mode(
+                attempt_root,
+                attempt_contract,
+                discard_pre_epoch_outputs=True,
+            )
+            if start_mode == "resume":
+                if not resume:
+                    raise RuntimeError(
+                        "visual training progress already exists; pass "
+                        "--visual-resume to continue"
+                    )
+                effective_resume = True
+            else:
+                # A pre-epoch retry deliberately does not ask Ultralytics to
+                # resume: there is no committed optimizer checkpoint to load.
+                effective_resume = False
+                pre_epoch_recovery = True
+                if not resume:
+                    if resolved_seed is None or declared_seed_provenance is None:
+                        raise RuntimeError("visual seed recovery inputs are missing")
+                    validate_seeded_attempt_invocation(
+                        attempt_contract,
+                        source_checkpoint=resolved_seed,
+                        expected_sha256=seed_sha256,
+                        seed_provenance=declared_seed_provenance,
+                    )
+        else:
+            if resume:
+                raise RuntimeError("named visual attempt contract is missing")
+            if resolved_seed is None or declared_seed_provenance is None:
+                raise RuntimeError("visual seed initialization inputs are missing")
+            attempt_needs_initialization = True
+            checkpoint = resolved_seed
     else:
         supplied_override_parts = {
             "checkpoint": checkpoint.exists(),
@@ -755,13 +883,16 @@ def visual_train_remote(
                 "sha256": locked["sha256"],
             }
     progress_path = attempt_root / "safety-selection-progress.json"
-    if resume and not progress_path.is_file():
-        raise RuntimeError("visual resume requires persisted safety selection progress")
-    if not resume and progress_path.exists() and not force:
-        raise RuntimeError(
-            "visual training progress already exists; pass --visual-resume to "
-            "continue or --force to start over"
-        )
+    if attempt_id == DEFAULT_ATTEMPT_ID:
+        if resume and not progress_path.is_file():
+            raise RuntimeError(
+                "visual resume requires persisted safety selection progress"
+            )
+        if not resume and progress_path.exists() and not force:
+            raise RuntimeError(
+                "visual training progress already exists; pass --visual-resume to "
+                "continue or --force to start over"
+            )
     if force and attempt_root.exists():
         if attempt_id != DEFAULT_ATTEMPT_ID:
             raise RuntimeError("named visual attempts cannot be force-deleted")
@@ -769,7 +900,7 @@ def visual_train_remote(
     if preserved_provenance is not None:
         attempt_root.mkdir(parents=True, exist_ok=True)
         persisted_provenance = attempt_root / "base_checkpoint_provenance.json"
-        if resume:
+        if effective_resume:
             if (
                 not persisted_provenance.is_file()
                 or sha256_file(persisted_provenance) != sha256_file(provenance_path)
@@ -794,20 +925,71 @@ def visual_train_remote(
         force=force,
         copy_workers=VISUAL_STAGE_COPY_WORKERS,
     )
-    persisted_stage = (
-        verify_persisted_stage_metadata(local_stage, attempt_root)
-        if resume
-        else persist_stage_metadata(local_stage, attempt_root)
+    local_stage = materialize_replay_training_stage(
+        local_stage,
+        seed=1311,
+        batch_size=VISUAL_TRAIN_BATCH_SIZE,
+        runtime_selection=True,
     )
+    if attempt_id != DEFAULT_ATTEMPT_ID:
+        if attempt_needs_initialization:
+            if resolved_seed is None or declared_seed_provenance is None:
+                raise RuntimeError("visual seed initialization inputs are missing")
+            attempt_contract = initialize_seeded_attempt(
+                attempt_root=attempt_root,
+                run_id=run_id,
+                attempt_id=attempt_id,
+                source_checkpoint=resolved_seed,
+                expected_sha256=seed_sha256,
+                seed_provenance=declared_seed_provenance,
+                optimizer_policy=STABLE_OPTIMIZER_POLICY,
+                license_path=license_path,
+                inherited_provenance_path=(
+                    provenance_path if provenance_path.exists() else None
+                ),
+                staged_metadata=local_stage,
+            )
+            persisted_stage = attempt_contract.get("staged_metadata")
+            if not isinstance(persisted_stage, dict):
+                raise RuntimeError("named visual attempt staging contract is missing")
+            # One commit publishes the seed, its provenance, and the complete
+            # hash-bound staging set; no partial attempt is made resumable.
+            run_volume.commit()
+        else:
+            if attempt_contract is None:
+                raise RuntimeError("named visual attempt contract is missing")
+            persisted_stage = verify_persisted_stage_metadata(
+                local_stage, attempt_root
+            )
+            if persisted_stage != attempt_contract.get("staged_metadata"):
+                raise RuntimeError("named visual attempt staging contract changed")
+            if pre_epoch_recovery:
+                # Persist disposal of any verified pre-epoch audit artifacts
+                # before the fresh-from-seed training invocation starts.
+                run_volume.commit()
+        checkpoint = Path(attempt_contract["checkpoint"])
+        base_source = {
+            "mode": "frozen-seed-training-attempt",
+            "attempt_id": attempt_id,
+            "attempt_manifest": str(attempt_contract["manifest_path"]),
+            "attempt_manifest_sha256": attempt_contract["manifest_sha256"],
+            "checkpoint_sha256": attempt_contract["checkpoint_sha256"],
+            "provenance": attempt_contract["provenance"],
+            "provenance_path": str(attempt_contract["provenance_path"]),
+            "provenance_sha256": attempt_contract["provenance_sha256"],
+        }
+    else:
+        persisted_stage = (
+            verify_persisted_stage_metadata(local_stage, attempt_root)
+            if effective_resume
+            else persist_stage_metadata(local_stage, attempt_root)
+        )
 
     def commit_visual_checkpoints() -> None:
         # The callback runs only after safety selection progress and the
         # last/best/safety checkpoints have been updated on the Volume.
         run_volume.commit()
 
-    selected_epochs = epochs or (2 if quick else 100)
-    if not 1 <= selected_epochs <= 500:
-        raise ValueError("visual epochs must be between 1 and 500")
     result = train(
         argparse.Namespace(
             dataset_yaml=Path(local_stage["dataset_yaml"]),
@@ -819,9 +1001,9 @@ def visual_train_remote(
             output_dir=attempt_root,
             epochs=selected_epochs,
             image_size=640,
-            batch_size=64,
+            batch_size=VISUAL_TRAIN_BATCH_SIZE,
             device="0",
-            workers=16,
+            workers=VISUAL_DATALOADER_WORKERS,
             # Ultralytics' built-in early stop follows its aggregate fitness,
             # while PLVA selects on minimum secret-class recall first.  Let the
             # requested schedule finish so aggregate fitness cannot stop a run
@@ -830,6 +1012,9 @@ def visual_train_remote(
             seed=1311,
             data_staging=persisted_stage,
             local_staging_manifest=Path(local_stage["staging_manifest"]),
+            runtime_selection_contract=Path(
+                local_stage["runtime_selection_contract"]
+            ),
             run_id=run_id,
             attempt_id=attempt_id,
             attempt_manifest_sha256=(
@@ -837,8 +1022,10 @@ def visual_train_remote(
                 if attempt_contract is not None
                 else None
             ),
-            resume=resume,
+            resume=effective_resume,
             checkpoint_commit_hook=commit_visual_checkpoints,
+            deadline_monotonic=deadline_monotonic,
+            enforce_canary=True,
         )
     )
     run_volume.commit()
@@ -873,9 +1060,16 @@ def visual_export_remote(
     training_root = attempt_output_dir(paths["root"], attempt_id)
     artifact_root = attempt_artifact_dir(paths["root"], attempt_id)
     source = training_root / "safety-best.pt"
+    runtime_thresholds = training_root / "safety-best-thresholds.json"
     license_path = paths["inputs"] / "detector-base-license.txt"
-    if not source.exists() or not license_path.exists():
-        raise RuntimeError("visual training or detector license input is missing")
+    if (
+        not source.exists()
+        or not runtime_thresholds.exists()
+        or not license_path.exists()
+    ):
+        raise RuntimeError(
+            "visual training, runtime thresholds, or detector license input is missing"
+        )
     if force and artifact_root.exists():
         shutil.rmtree(artifact_root)
     result = export(
@@ -883,6 +1077,7 @@ def visual_export_remote(
             source=source,
             source_license=license_path.read_text(encoding="utf-8").strip(),
             training_manifest=training_root / "training_manifest.json",
+            runtime_thresholds=runtime_thresholds,
             output_dir=artifact_root,
             image_size=640,
             opset=17,
@@ -932,6 +1127,9 @@ def download_run(run_id: str, destination: Path) -> dict[str, Any]:
 def download_visual_run(
     run_id: str, destination: Path, attempt_id: str = "default"
 ) -> dict[str, Any]:
+    from training.visual.runtime_threshold_artifact import (
+        load_exported_runtime_threshold_artifact,
+    )
     from training.visual.training_attempt import (
         attempt_artifact_dir,
         attempt_output_dir,
@@ -948,6 +1146,7 @@ def download_visual_run(
         f"visual/{artifact_name}/detector.onnx",
         f"visual/{artifact_name}/detector_manifest.json",
         f"visual/{artifact_name}/MODEL_CARD.md",
+        f"visual/{artifact_name}/safety-best-thresholds.json",
         f"visual/{training_name}/training_manifest.json",
         f"visual/{training_name}/base_checkpoint_provenance.json",
         f"visual/{training_name}/frozen-seed-provenance.json",
@@ -966,7 +1165,21 @@ def download_visual_run(
         downloaded.append(relative)
     if not downloaded:
         raise RuntimeError("no visual artifacts are available for this run")
-    return {"destination": str(destination), "downloaded": downloaded}
+    runtime_thresholds = f"visual/{artifact_name}/safety-best-thresholds.json"
+    if runtime_thresholds not in downloaded:
+        raise RuntimeError("visual runtime threshold artifact is unavailable")
+    verified_thresholds = load_exported_runtime_threshold_artifact(
+        destination / "detector.onnx",
+        destination / "safety-best-thresholds.json",
+        destination / "detector_manifest.json",
+    )
+    return {
+        "destination": str(destination),
+        "downloaded": downloaded,
+        "runtime_threshold_profile_sha256": verified_thresholds[
+            "threshold_profile_sha256"
+        ],
+    }
 
 
 @app.local_entrypoint()
@@ -1000,6 +1213,7 @@ def main(
         "download",
         "visual-prepare",
         "visual-audit",
+        "visual-selection-audit",
         "visual-train",
         "visual-export",
         "visual-download",
@@ -1060,6 +1274,10 @@ def main(
         )
     if stage == "visual-audit":
         result["visual_audit"] = visual_audit_remote.remote(run_id)
+    if stage == "visual-selection-audit":
+        result["visual_selection_audit"] = visual_selection_audit_remote.remote(
+            run_id
+        )
     if stage == "visual-train":
         # Long GPU work uses an asynchronous Modal call while this entrypoint
         # still waits and returns the structured result to the caller.

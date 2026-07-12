@@ -1,0 +1,28 @@
+{
+  "artifact_manifest": "detector_manifest.json",
+  "created_at": "2026-07-12T14:54:08.790041+00:00",
+  "deterministic_export": {
+    "protobuf_serialization": "deterministic",
+    "torch_threads": 1,
+    "volatile_metadata_removed": [
+      "date"
+    ]
+  },
+  "model_card": "MODEL_CARD.md",
+  "operational_thresholds": {
+    "calibration_contract_sha256": "442a2f2dd06dd230dbe5c58ffe00382917f3f098265e8c138cb049ea1327ffdc",
+    "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+    "metric_basis": "runtime-top1-fixed-profile-v1",
+    "path": "safety-best-thresholds.json",
+    "selection_inventory_contract_sha256": "d2457d0cf5ee12682c1b3842fc37c7b5c4b1efff578b4e864f939ca50df6b084",
+    "sha256": "c5c9892e0b87d5356645ac70090e22c21f95efd41d2391ad854c45ec87ecea60",
+    "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e"
+  },
+  "output": "detector.onnx",
+  "output_sha256": "2ed3f25c9bee375dc1683cf0ffa2044374b6bc35dd89a465a7dce6451ce8b928",
+  "schema_version": 2,
+  "source": "/vol/runs/plva-visual-agpl-ats-v3/visual/training-safe-head-v10/safety-best.pt",
+  "source_license": "AGPL-3.0-only",
+  "source_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+  "status": "exported"
+}

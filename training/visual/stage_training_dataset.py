@@ -155,6 +155,12 @@ def _validate_copy_workers(value: int) -> int:
     return value
 
 
+def _is_ultralytics_label_cache(relative: Path) -> bool:
+    """Identify derived YOLO cache files that are never dataset inputs."""
+
+    return relative.parent == Path("labels") and relative.suffix.lower() == ".cache"
+
+
 def _copy_tree_once(
     source: Path, destination: Path, *, copy_workers: int
 ) -> dict[str, Any]:
@@ -176,6 +182,13 @@ def _copy_tree_once(
             raise RuntimeError(
                 f"detector source tree contains a non-regular file: {path}"
             )
+        # Older Ultralytics runs may have written ``labels/<split>.cache``
+        # beside a Volume-backed dataset. Those files are derived indexes, not
+        # immutable training records. Exclude them before the copy inventory is
+        # computed so the initial stage and every resumed verification consume
+        # the same cache-free tree.
+        if _is_ultralytics_label_cache(relative):
+            continue
         files.append(path)
 
     def copy_one(path: Path) -> tuple[str, int, str]:
@@ -242,6 +255,50 @@ def _inventory_tree(root: Path) -> dict[str, Any]:
     return _inventory_summary(fingerprints, total_bytes)
 
 
+def publish_verified_tree(
+    source: Path,
+    destination: Path,
+    *,
+    force: bool = False,
+    copy_workers: int = COPY_WORKERS,
+) -> dict[str, Any]:
+    """Atomically publish a locally prepared tree to a durable Volume path."""
+
+    copy_workers = _validate_copy_workers(copy_workers)
+    if source.is_symlink() or not source.is_dir():
+        raise RuntimeError(f"prepared source tree is missing or unsafe: {source}")
+    source = source.resolve()
+    if destination.exists() and not force:
+        raise FileExistsError(f"durable prepared tree already exists: {destination}")
+    temporary = destination.with_name(
+        f".{destination.name}.publishing-{os.getpid()}"
+    )
+    backup = destination.with_name(f".{destination.name}.previous-{os.getpid()}")
+    shutil.rmtree(temporary, ignore_errors=True)
+    shutil.rmtree(backup, ignore_errors=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        copied = _copy_tree_once(
+            source, temporary, copy_workers=copy_workers
+        )
+        if _inventory_tree(temporary) != copied:
+            raise RuntimeError("published detector tree failed pre-rename verification")
+        if destination.exists():
+            destination.rename(backup)
+        temporary.rename(destination)
+        if _inventory_tree(destination) != copied:
+            raise RuntimeError("published detector tree failed final verification")
+        shutil.rmtree(backup, ignore_errors=True)
+        return copied
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        if destination.exists() and backup.exists():
+            shutil.rmtree(destination, ignore_errors=True)
+        if backup.exists() and not destination.exists():
+            backup.rename(destination)
+        raise
+
+
 def _validate_pairs(root: Path, splits: tuple[str, ...], source_name: str) -> None:
     for split in splits:
         images = root / "images" / split
@@ -272,6 +329,19 @@ def _validate_pairs(root: Path, splits: tuple[str, ...], source_name: str) -> No
 
 
 def _verify_stage(root: Path, expected_contract_hash: str) -> dict[str, Any]:
+    # Ultralytics writes derived ``labels/<split>.cache`` files beside an
+    # otherwise immutable dataset. A warm Modal container can therefore reuse
+    # a stage only after removing those known regular cache artifacts. Never
+    # weaken the inventory comparison for arbitrary extra files.
+    for source_name in SOURCE_SPLITS:
+        labels_root = root / source_name / "labels"
+        if labels_root.is_dir() and not labels_root.is_symlink():
+            for cache_path in labels_root.glob("*.cache"):
+                if cache_path.is_symlink() or not cache_path.is_file():
+                    raise RuntimeError(
+                        f"unsafe Ultralytics cache artifact in staged {source_name}"
+                    )
+                cache_path.unlink()
     stage_path = root / "staging_manifest.json"
     stage = _load_json(stage_path, "local detector staging manifest")
     if stage.get("schema_version") != STAGE_SCHEMA_VERSION:
@@ -474,6 +544,24 @@ def persist_stage_metadata(
             output_dir / "dataset-staging-manifest.json",
         ),
     }
+    if stage.get("replay_manifest") or stage.get("replay_train_list"):
+        copies.update(
+            {
+                "replay_manifest": (
+                    Path(str(stage.get("replay_manifest", ""))),
+                    output_dir / "staged-replay-manifest.json",
+                ),
+                "replay_train_list": (
+                    Path(str(stage.get("replay_train_list", ""))),
+                    output_dir / "staged-replay-train-list.txt",
+                ),
+            }
+        )
+    if stage.get("runtime_selection_contract"):
+        copies["runtime_selection_contract"] = (
+            Path(str(stage["runtime_selection_contract"])),
+            output_dir / "staged-runtime-selection-contract.json",
+        )
     result: dict[str, str] = {}
     for name, (source, destination) in copies.items():
         temporary = destination.with_name(f".{destination.name}.partial-{os.getpid()}")
@@ -509,6 +597,24 @@ def verify_persisted_stage_metadata(
             output_dir / "dataset-staging-manifest.json",
         ),
     }
+    if stage.get("replay_manifest") or stage.get("replay_train_list"):
+        copies.update(
+            {
+                "replay_manifest": (
+                    Path(str(stage.get("replay_manifest", ""))),
+                    output_dir / "staged-replay-manifest.json",
+                ),
+                "replay_train_list": (
+                    Path(str(stage.get("replay_train_list", ""))),
+                    output_dir / "staged-replay-train-list.txt",
+                ),
+            }
+        )
+    if stage.get("runtime_selection_contract"):
+        copies["runtime_selection_contract"] = (
+            Path(str(stage["runtime_selection_contract"])),
+            output_dir / "staged-runtime-selection-contract.json",
+        )
     result: dict[str, str] = {}
     for name, (current, persisted) in copies.items():
         if current.is_symlink() or not current.is_file():

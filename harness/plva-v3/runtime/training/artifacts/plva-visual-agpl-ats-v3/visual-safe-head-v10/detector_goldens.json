@@ -1,0 +1,661 @@
+{
+  "input": {
+    "algorithm": "float32((flat_index mod 256) / 255)",
+    "dtype": "float32",
+    "name": "images",
+    "shape": [
+      1,
+      3,
+      640,
+      640
+    ]
+  },
+  "model_sha256": "2ed3f25c9bee375dc1683cf0ffa2044374b6bc35dd89a465a7dce6451ce8b928",
+  "output": {
+    "maximum": 637.4666748046875,
+    "mean": 58.934410095214844,
+    "minimum": 0.0,
+    "name": "output0",
+    "samples": [
+      {
+        "anchor": 0,
+        "channel": 0,
+        "flat_index": 0,
+        "value": 42.21725845336914
+      },
+      {
+        "anchor": 1,
+        "channel": 0,
+        "flat_index": 1,
+        "value": 60.180843353271484
+      },
+      {
+        "anchor": 7,
+        "channel": 0,
+        "flat_index": 7,
+        "value": 65.95133209228516
+      },
+      {
+        "anchor": 63,
+        "channel": 0,
+        "flat_index": 63,
+        "value": 478.7200622558594
+      },
+      {
+        "anchor": 511,
+        "channel": 0,
+        "flat_index": 511,
+        "value": 237.85598754882812
+      },
+      {
+        "anchor": 1023,
+        "channel": 0,
+        "flat_index": 1023,
+        "value": 492.17950439453125
+      },
+      {
+        "anchor": 4200,
+        "channel": 0,
+        "flat_index": 4200,
+        "value": 320.73724365234375
+      },
+      {
+        "anchor": 8399,
+        "channel": 0,
+        "flat_index": 8399,
+        "value": 576.4165649414062
+      },
+      {
+        "anchor": 0,
+        "channel": 1,
+        "flat_index": 8400,
+        "value": 4.665717124938965
+      },
+      {
+        "anchor": 1,
+        "channel": 1,
+        "flat_index": 8401,
+        "value": 4.9175591468811035
+      },
+      {
+        "anchor": 7,
+        "channel": 1,
+        "flat_index": 8407,
+        "value": 6.412424087524414
+      },
+      {
+        "anchor": 63,
+        "channel": 1,
+        "flat_index": 8463,
+        "value": 4.807689666748047
+      },
+      {
+        "anchor": 511,
+        "channel": 1,
+        "flat_index": 8911,
+        "value": 52.18033981323242
+      },
+      {
+        "anchor": 1023,
+        "channel": 1,
+        "flat_index": 9423,
+        "value": 100.2281494140625
+      },
+      {
+        "anchor": 4200,
+        "channel": 1,
+        "flat_index": 12600,
+        "value": 420.2532043457031
+      },
+      {
+        "anchor": 8399,
+        "channel": 1,
+        "flat_index": 16799,
+        "value": 599.3820190429688
+      },
+      {
+        "anchor": 0,
+        "channel": 2,
+        "flat_index": 16800,
+        "value": 87.92382049560547
+      },
+      {
+        "anchor": 1,
+        "channel": 2,
+        "flat_index": 16801,
+        "value": 123.83051300048828
+      },
+      {
+        "anchor": 7,
+        "channel": 2,
+        "flat_index": 16807,
+        "value": 136.95799255371094
+      },
+      {
+        "anchor": 63,
+        "channel": 2,
+        "flat_index": 16863,
+        "value": 66.68145751953125
+      },
+      {
+        "anchor": 511,
+        "channel": 2,
+        "flat_index": 17311,
+        "value": 41.20196533203125
+      },
+      {
+        "anchor": 1023,
+        "channel": 2,
+        "flat_index": 17823,
+        "value": 43.716705322265625
+      },
+      {
+        "anchor": 4200,
+        "channel": 2,
+        "flat_index": 21000,
+        "value": 118.58029174804688
+      },
+      {
+        "anchor": 8399,
+        "channel": 2,
+        "flat_index": 25199,
+        "value": 135.95132446289062
+      },
+      {
+        "anchor": 0,
+        "channel": 3,
+        "flat_index": 25200,
+        "value": 10.417413711547852
+      },
+      {
+        "anchor": 1,
+        "channel": 3,
+        "flat_index": 25201,
+        "value": 10.916958808898926
+      },
+      {
+        "anchor": 7,
+        "channel": 3,
+        "flat_index": 25207,
+        "value": 14.330892562866211
+      },
+      {
+        "anchor": 63,
+        "channel": 3,
+        "flat_index": 25263,
+        "value": 12.199077606201172
+      },
+      {
+        "anchor": 511,
+        "channel": 3,
+        "flat_index": 25711,
+        "value": 16.400352478027344
+      },
+      {
+        "anchor": 1023,
+        "channel": 3,
+        "flat_index": 26223,
+        "value": 16.365554809570312
+      },
+      {
+        "anchor": 4200,
+        "channel": 3,
+        "flat_index": 29400,
+        "value": 20.01641845703125
+      },
+      {
+        "anchor": 8399,
+        "channel": 3,
+        "flat_index": 33599,
+        "value": 93.63623046875
+      },
+      {
+        "anchor": 0,
+        "channel": 4,
+        "flat_index": 33600,
+        "value": 1.0728836059570312e-06
+      },
+      {
+        "anchor": 1,
+        "channel": 4,
+        "flat_index": 33601,
+        "value": 5.960464477539062e-07
+      },
+      {
+        "anchor": 7,
+        "channel": 4,
+        "flat_index": 33607,
+        "value": 6.854534149169922e-07
+      },
+      {
+        "anchor": 63,
+        "channel": 4,
+        "flat_index": 33663,
+        "value": 4.062056541442871e-05
+      },
+      {
+        "anchor": 511,
+        "channel": 4,
+        "flat_index": 34111,
+        "value": 5.692243576049805e-06
+      },
+      {
+        "anchor": 1023,
+        "channel": 4,
+        "flat_index": 34623,
+        "value": 5.543231964111328e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 4,
+        "flat_index": 37800,
+        "value": 8.940696716308594e-08
+      },
+      {
+        "anchor": 8399,
+        "channel": 4,
+        "flat_index": 41999,
+        "value": 5.841255187988281e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 5,
+        "flat_index": 42000,
+        "value": 2.294778823852539e-06
+      },
+      {
+        "anchor": 1,
+        "channel": 5,
+        "flat_index": 42001,
+        "value": 2.7120113372802734e-06
+      },
+      {
+        "anchor": 7,
+        "channel": 5,
+        "flat_index": 42007,
+        "value": 0.009124964475631714
+      },
+      {
+        "anchor": 63,
+        "channel": 5,
+        "flat_index": 42063,
+        "value": 2.428889274597168e-05
+      },
+      {
+        "anchor": 511,
+        "channel": 5,
+        "flat_index": 42511,
+        "value": 2.3245811462402344e-06
+      },
+      {
+        "anchor": 1023,
+        "channel": 5,
+        "flat_index": 43023,
+        "value": 2.771615982055664e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 5,
+        "flat_index": 46200,
+        "value": 1.519918441772461e-05
+      },
+      {
+        "anchor": 8399,
+        "channel": 5,
+        "flat_index": 50399,
+        "value": 5.364418029785156e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 6,
+        "flat_index": 50400,
+        "value": 6.854534149169922e-07
+      },
+      {
+        "anchor": 1,
+        "channel": 6,
+        "flat_index": 50401,
+        "value": 6.258487701416016e-07
+      },
+      {
+        "anchor": 7,
+        "channel": 6,
+        "flat_index": 50407,
+        "value": 8.106231689453125e-05
+      },
+      {
+        "anchor": 63,
+        "channel": 6,
+        "flat_index": 50463,
+        "value": 6.318092346191406e-06
+      },
+      {
+        "anchor": 511,
+        "channel": 6,
+        "flat_index": 50911,
+        "value": 1.2218952178955078e-06
+      },
+      {
+        "anchor": 1023,
+        "channel": 6,
+        "flat_index": 51423,
+        "value": 1.4603137969970703e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 6,
+        "flat_index": 54600,
+        "value": 5.960464477539063e-08
+      },
+      {
+        "anchor": 8399,
+        "channel": 6,
+        "flat_index": 58799,
+        "value": 6.079673767089844e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 7,
+        "flat_index": 58800,
+        "value": 2.7120113372802734e-06
+      },
+      {
+        "anchor": 1,
+        "channel": 7,
+        "flat_index": 58801,
+        "value": 7.450580596923828e-07
+      },
+      {
+        "anchor": 7,
+        "channel": 7,
+        "flat_index": 58807,
+        "value": 2.384185791015625e-07
+      },
+      {
+        "anchor": 63,
+        "channel": 7,
+        "flat_index": 58863,
+        "value": 9.834766387939453e-07
+      },
+      {
+        "anchor": 511,
+        "channel": 7,
+        "flat_index": 59311,
+        "value": 2.7418136596679688e-06
+      },
+      {
+        "anchor": 1023,
+        "channel": 7,
+        "flat_index": 59823,
+        "value": 2.8908252716064453e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 7,
+        "flat_index": 63000,
+        "value": 0.0
+      },
+      {
+        "anchor": 8399,
+        "channel": 7,
+        "flat_index": 67199,
+        "value": 9.08970832824707e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 8,
+        "flat_index": 67200,
+        "value": 8.642673492431641e-07
+      },
+      {
+        "anchor": 1,
+        "channel": 8,
+        "flat_index": 67201,
+        "value": 7.152557373046875e-07
+      },
+      {
+        "anchor": 7,
+        "channel": 8,
+        "flat_index": 67207,
+        "value": 1.3709068298339844e-06
+      },
+      {
+        "anchor": 63,
+        "channel": 8,
+        "flat_index": 67263,
+        "value": 8.046627044677734e-07
+      },
+      {
+        "anchor": 511,
+        "channel": 8,
+        "flat_index": 67711,
+        "value": 9.5367431640625e-07
+      },
+      {
+        "anchor": 1023,
+        "channel": 8,
+        "flat_index": 68223,
+        "value": 1.341104507446289e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 8,
+        "flat_index": 71400,
+        "value": 5.960464477539063e-08
+      },
+      {
+        "anchor": 8399,
+        "channel": 8,
+        "flat_index": 75599,
+        "value": 9.59634780883789e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 9,
+        "flat_index": 75600,
+        "value": 7.152557373046875e-07
+      },
+      {
+        "anchor": 1,
+        "channel": 9,
+        "flat_index": 75601,
+        "value": 2.980232238769531e-07
+      },
+      {
+        "anchor": 7,
+        "channel": 9,
+        "flat_index": 75607,
+        "value": 0.0
+      },
+      {
+        "anchor": 63,
+        "channel": 9,
+        "flat_index": 75663,
+        "value": 1.3709068298339844e-06
+      },
+      {
+        "anchor": 511,
+        "channel": 9,
+        "flat_index": 76111,
+        "value": 9.5367431640625e-07
+      },
+      {
+        "anchor": 1023,
+        "channel": 9,
+        "flat_index": 76623,
+        "value": 1.2218952178955078e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 9,
+        "flat_index": 79800,
+        "value": 5.960464477539063e-08
+      },
+      {
+        "anchor": 8399,
+        "channel": 9,
+        "flat_index": 83999,
+        "value": 4.798173904418945e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 10,
+        "flat_index": 84000,
+        "value": 1.7583370208740234e-06
+      },
+      {
+        "anchor": 1,
+        "channel": 10,
+        "flat_index": 84001,
+        "value": 1.1026859283447266e-06
+      },
+      {
+        "anchor": 7,
+        "channel": 10,
+        "flat_index": 84007,
+        "value": 2.956390380859375e-05
+      },
+      {
+        "anchor": 63,
+        "channel": 10,
+        "flat_index": 84063,
+        "value": 2.8312206268310547e-06
+      },
+      {
+        "anchor": 511,
+        "channel": 10,
+        "flat_index": 84511,
+        "value": 2.0563602447509766e-06
+      },
+      {
+        "anchor": 1023,
+        "channel": 10,
+        "flat_index": 85023,
+        "value": 2.294778823852539e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 10,
+        "flat_index": 88200,
+        "value": 1.537799835205078e-05
+      },
+      {
+        "anchor": 8399,
+        "channel": 10,
+        "flat_index": 92399,
+        "value": 4.410743713378906e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 11,
+        "flat_index": 92400,
+        "value": 2.473592758178711e-06
+      },
+      {
+        "anchor": 1,
+        "channel": 11,
+        "flat_index": 92401,
+        "value": 1.6987323760986328e-06
+      },
+      {
+        "anchor": 7,
+        "channel": 11,
+        "flat_index": 92407,
+        "value": 0.0005346834659576416
+      },
+      {
+        "anchor": 63,
+        "channel": 11,
+        "flat_index": 92463,
+        "value": 5.125999450683594e-06
+      },
+      {
+        "anchor": 511,
+        "channel": 11,
+        "flat_index": 92911,
+        "value": 2.4139881134033203e-06
+      },
+      {
+        "anchor": 1023,
+        "channel": 11,
+        "flat_index": 93423,
+        "value": 2.771615982055664e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 11,
+        "flat_index": 96600,
+        "value": 1.6391277313232422e-06
+      },
+      {
+        "anchor": 8399,
+        "channel": 11,
+        "flat_index": 100799,
+        "value": 6.318092346191406e-06
+      },
+      {
+        "anchor": 0,
+        "channel": 12,
+        "flat_index": 100800,
+        "value": 8.046627044677734e-07
+      },
+      {
+        "anchor": 1,
+        "channel": 12,
+        "flat_index": 100801,
+        "value": 1.1622905731201172e-06
+      },
+      {
+        "anchor": 7,
+        "channel": 12,
+        "flat_index": 100807,
+        "value": 2.384185791015625e-07
+      },
+      {
+        "anchor": 63,
+        "channel": 12,
+        "flat_index": 100863,
+        "value": 2.294778823852539e-06
+      },
+      {
+        "anchor": 511,
+        "channel": 12,
+        "flat_index": 101311,
+        "value": 8.940696716308594e-07
+      },
+      {
+        "anchor": 1023,
+        "channel": 12,
+        "flat_index": 101823,
+        "value": 1.0728836059570312e-06
+      },
+      {
+        "anchor": 4200,
+        "channel": 12,
+        "flat_index": 105000,
+        "value": 0.0
+      },
+      {
+        "anchor": 8399,
+        "channel": 12,
+        "flat_index": 109199,
+        "value": 1.6123056411743164e-05
+      }
+    ],
+    "shape": [
+      1,
+      13,
+      8400
+    ]
+  },
+  "reference_runtime": {
+    "package": "onnxruntime",
+    "provider": "CPUExecutionProvider",
+    "version": "1.27.0"
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "absolute": 0.0001,
+    "relative": 0.0001
+  }
+}

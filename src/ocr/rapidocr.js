@@ -1,5 +1,6 @@
 import * as ort from "onnxruntime-web";
 
+import { runOrtSerialized, selectWasmThreadCount } from "../runtime.js";
 import {
   computeOcrDetectorSize,
   decodeCtc,
@@ -24,6 +25,10 @@ const MIN_TEXT_CONFIDENCE = 0.5;
 let detectorPromise;
 let recognizerPromise;
 let dictionaryPromise;
+
+export async function warmRapidOcr() {
+  await Promise.all([getDetector(), getRecognizer(), getDictionary()]);
+}
 
 export async function recognizeScreenshotText(
   sourceCanvas,
@@ -57,7 +62,9 @@ async function detectTextBoxes(sourceCanvas, session) {
   const tensor = createDetectorTensor(sourceCanvas, size.width, size.height);
   let output;
   try {
-    const result = await session.run({ [session.inputNames[0]]: tensor });
+    const result = await runOrtSerialized(() =>
+      session.run({ [session.inputNames[0]]: tensor }),
+    );
     output = result[session.outputNames[0]];
     if (!output || output.dims.length !== 4) {
       throw new Error("the OCR detector returned an unexpected output");
@@ -101,7 +108,9 @@ async function recognizeBoxes(sourceCanvas, boxes, session, dictionary) {
     const tensor = createRecognizerTensor(sourceCanvas, batch, targetWidth);
     let output;
     try {
-      const inference = await session.run({ [session.inputNames[0]]: tensor });
+      const inference = await runOrtSerialized(() =>
+        session.run({ [session.inputNames[0]]: tensor }),
+      );
       output = inference[session.outputNames[0]];
       if (!output || output.dims.length !== 3) {
         throw new Error("the OCR recognizer returned an unexpected output");
@@ -162,6 +171,8 @@ function createDetectorTensor(sourceCanvas, width, height) {
 function createRecognizerTensor(sourceCanvas, batch, targetWidth) {
   const plane = RECOGNIZER_HEIGHT * targetWidth;
   const data = new Float32Array(batch.length * plane * 3);
+  const canvas = document.createElement("canvas");
+  canvas.height = RECOGNIZER_HEIGHT;
 
   for (let sample = 0; sample < batch.length; sample += 1) {
     const { box, ratio } = batch[sample];
@@ -169,9 +180,7 @@ function createRecognizerTensor(sourceCanvas, batch, targetWidth) {
       targetWidth,
       Math.max(1, Math.ceil(RECOGNIZER_HEIGHT * ratio)),
     );
-    const canvas = document.createElement("canvas");
     canvas.width = resizedWidth;
-    canvas.height = RECOGNIZER_HEIGHT;
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("this browser cannot create an OCR crop canvas");
     context.imageSmoothingEnabled = true;
@@ -246,16 +255,24 @@ function createSession(url, name) {
       return response.arrayBuffer();
     })
     .then((model) =>
-      ort.InferenceSession.create(model, {
-        executionProviders: ["wasm"],
-        graphOptimizationLevel: "all",
-      }),
+      runOrtSerialized(() =>
+        ort.InferenceSession.create(model, {
+          executionProviders: ["wasm"],
+          graphOptimizationLevel: "all",
+        }),
+      ),
     );
 }
 
 function configureOrt() {
-  ort.env.wasm.numThreads = globalThis.crossOriginIsolated
-    ? Math.max(1, Math.min(4, globalThis.navigator?.hardwareConcurrency ?? 1))
-    : 1;
+  ort.env.wasm.numThreads = selectWasmThreadCount();
   ort.env.wasm.proxy = false;
+  const value = globalThis.__PLVA_ORT_WASM_URL__;
+  if (typeof value === "string" && value) {
+    const url = new URL(value, globalThis.location?.href ?? import.meta.url);
+    if (globalThis.location && url.origin !== globalThis.location.origin) {
+      throw new Error("ONNX Runtime WASM must be served from the application origin");
+    }
+    ort.env.wasm.wasmPaths = { wasm: url.href };
+  }
 }

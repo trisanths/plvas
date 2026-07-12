@@ -1,0 +1,549 @@
+{
+  "artifact": {
+    "bytes": 10428657,
+    "format": "onnx",
+    "input": {
+      "dtype": "float32",
+      "dynamic_axes": [
+        "batch",
+        "height",
+        "width"
+      ],
+      "layout": "NCHW",
+      "name": "images"
+    },
+    "opset": 17,
+    "path": "detector.onnx",
+    "sha256": "2ed3f25c9bee375dc1683cf0ffa2044374b6bc35dd89a465a7dce6451ce8b928"
+  },
+  "created_at": "2026-07-12T14:54:08.790041+00:00",
+  "operational_thresholds": {
+    "calibration_contract_sha256": "442a2f2dd06dd230dbe5c58ffe00382917f3f098265e8c138cb049ea1327ffdc",
+    "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+    "metric_basis": "runtime-top1-fixed-profile-v1",
+    "path": "safety-best-thresholds.json",
+    "selection_inventory_contract_sha256": "d2457d0cf5ee12682c1b3842fc37c7b5c4b1efff578b4e864f939ca50df6b084",
+    "sha256": "c5c9892e0b87d5356645ac70090e22c21f95efd41d2391ad854c45ec87ecea60",
+    "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e"
+  },
+  "publication_blockers": [
+    "AGPL development output cannot ship in a closed-source product; obtain an Ultralytics Enterprise license",
+    "WebPII and base-checkpoint license obligations require review",
+    "full training schedule stopped early by user",
+    "cross-runtime ONNX parity not yet proven",
+    "detector INT8 quantization not yet approved",
+    "selected checkpoint does not meet the zero-secret-miss gate"
+  ],
+  "quantization": {
+    "approval_command": "python -m training.visual.quantize_detector_onnx --source detector.onnx --runtime-thresholds safety-best-thresholds.json --detector-manifest detector_manifest.json",
+    "candidate_strategy": {
+      "activation_type": "QUInt8",
+      "format": "QDQ",
+      "operators": [
+        "Conv"
+      ],
+      "runtime_target": "onnxruntime-web@1.27.0/wasm",
+      "weight_type": "QInt8"
+    },
+    "fp32_remains_authoritative": true,
+    "required_evidence": [
+      "at least 50% artifact byte reduction",
+      "frozen all-class holdout safety parity",
+      "full-output numerical comparison",
+      "pinned ONNX Runtime 1.27.0 Node and WASM parity"
+    ],
+    "runtime_artifact": null,
+    "status": "gated-not-produced"
+  },
+  "release_eligible": false,
+  "schema_version": 2,
+  "source": {
+    "license": "AGPL-3.0-only",
+    "path": "/vol/runs/plva-visual-agpl-ats-v3/visual/training-safe-head-v10/safety-best.pt",
+    "sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad"
+  },
+  "status": "trained-unpublished",
+  "training": {
+    "distribution": {
+      "closed_source_release_allowed": false,
+      "commercial_license_approved": false,
+      "mode": "agpl-development"
+    },
+    "epochs": 35,
+    "metrics": {},
+    "runtime_checkpoint_selection_evaluation": {
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "published_webpii_test_used": false,
+      "selected": {
+        "calibration_contract_sha256": "442a2f2dd06dd230dbe5c58ffe00382917f3f098265e8c138cb049ea1327ffdc",
+        "calibration_evidence": {
+          "kind": "per-class-recall-preserving-calibration",
+          "passed": true,
+          "profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+          "report": {
+            "baseline_profile": {
+              "ADDRESS": 0.1,
+              "CARD_NUMBER": 0.08,
+              "CVC": 0.01,
+              "EMAIL": 0.1,
+              "NAME": 0.1,
+              "PHONE": 0.1,
+              "SECRET": 0.08,
+              "SENSITIVE_FIELD": 0.08,
+              "SENSITIVE_IMAGE": 0.35
+            },
+            "baseline_profile_sha256": "7d95839d868d35aacf43c47cf579437652019fc89a60c521718862fd25dc6ff3",
+            "calibrated_profile": {
+              "ADDRESS": 0.099099,
+              "CARD_NUMBER": 0.079079,
+              "CVC": 0.009009,
+              "EMAIL": 0.099099,
+              "NAME": 0.099099,
+              "PHONE": 0.099099,
+              "SECRET": 0.079079,
+              "SENSITIVE_FIELD": 0.079079,
+              "SENSITIVE_IMAGE": 0.349349
+            },
+            "calibrated_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+            "passed": true,
+            "per_class": {
+              "ADDRESS": {
+                "baseline_threshold": 0.1,
+                "candidate_precision": 0.5860828454670289,
+                "candidate_recall": 0.9490026732469669,
+                "candidate_threshold": 0.099099,
+                "maximum_safe_threshold": 0.1,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 0.9490026732469669,
+                "target_recall": 0.9465026732469669
+              },
+              "CARD_NUMBER": {
+                "baseline_threshold": 0.08,
+                "candidate_precision": 0.6030996037628561,
+                "candidate_recall": 0.9610051993067591,
+                "candidate_threshold": 0.079079,
+                "maximum_safe_threshold": 0.08,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 0.9610051993067591,
+                "target_recall": 0.9585051993067591
+              },
+              "CVC": {
+                "baseline_threshold": 0.01,
+                "candidate_precision": 0.42599851117009313,
+                "candidate_recall": 1.0,
+                "candidate_threshold": 0.009009,
+                "maximum_safe_threshold": 0.01,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 1.0,
+                "target_recall": 0.9975
+              },
+              "EMAIL": {
+                "baseline_threshold": 0.1,
+                "candidate_precision": 0.6217135477420398,
+                "candidate_recall": 0.9611829944547134,
+                "candidate_threshold": 0.099099,
+                "maximum_safe_threshold": 0.1,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 0.9611829944547134,
+                "target_recall": 0.9586829944547135
+              },
+              "NAME": {
+                "baseline_threshold": 0.1,
+                "candidate_precision": 0.7035199915953003,
+                "candidate_recall": 0.9639953542392566,
+                "candidate_threshold": 0.099099,
+                "maximum_safe_threshold": 0.1,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 0.9639953542392566,
+                "target_recall": 0.9614953542392567
+              },
+              "PHONE": {
+                "baseline_threshold": 0.1,
+                "candidate_precision": 0.7194407196334505,
+                "candidate_recall": 0.9435548438751001,
+                "candidate_threshold": 0.099099,
+                "maximum_safe_threshold": 0.1,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 0.9435548438751001,
+                "target_recall": 0.9410548438751002
+              },
+              "SECRET": {
+                "baseline_threshold": 0.08,
+                "candidate_precision": 0.7593922984391114,
+                "candidate_recall": 0.9597402597402598,
+                "candidate_threshold": 0.079079,
+                "maximum_safe_threshold": 0.08,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 0.9597402597402598,
+                "target_recall": 0.9572402597402598
+              },
+              "SENSITIVE_FIELD": {
+                "baseline_threshold": 0.08,
+                "candidate_precision": 0.7300440011483843,
+                "candidate_recall": 0.9487453283502403,
+                "candidate_threshold": 0.079079,
+                "maximum_safe_threshold": 0.08,
+                "passed": true,
+                "recall_margin": 0.0030306139842332103,
+                "seed_operating_recall": 0.948214714366007,
+                "target_recall": 0.9457147143660071
+              },
+              "SENSITIVE_IMAGE": {
+                "baseline_threshold": 0.35,
+                "candidate_precision": 0.8771749351468193,
+                "candidate_recall": 0.8985507246376812,
+                "candidate_threshold": 0.349349,
+                "maximum_safe_threshold": 0.35,
+                "passed": true,
+                "recall_margin": 0.0024999999999999467,
+                "seed_operating_recall": 0.8985507246376812,
+                "target_recall": 0.8960507246376812
+              }
+            },
+            "policy": {
+              "maximum_calibration_recall_drop": 0.0025,
+              "maximum_candidate_threshold": "frozen-seed-baseline-per-class",
+              "maximum_threshold": 0.95,
+              "minimum_threshold": 0.005,
+              "name": "privacy-monotone-recall-preserving-calibration-v2",
+              "objective": "highest per-class confidence preserving frozen-seed recall without raising a known-safe threshold",
+              "published_test_used": false,
+              "schema_version": 2,
+              "selection_data": "synthetic-and-webpii-published-train-calibration"
+            },
+            "policy_sha256": "4505209bcef38fcd2cf3d8c186be5537ca1ea1817fd7dd1bbe99374dcd2c24cb",
+            "schema_version": 2,
+            "thresholds_never_raised": true
+          }
+        },
+        "calibration_passed": true,
+        "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+        "compatible_coverage_recall_mean": 0.9652807678551956,
+        "epoch": 0,
+        "map50_mean": 0.950275239431627,
+        "metric_basis": "runtime-top1-fixed-profile-v1",
+        "predictions_per_image_mean": 8.075065805954429,
+        "privacy_coverage_recall_mean": 0.9759900650430919,
+        "schema_version": 1,
+        "secret_compatible_recall_minimum": 0.9445086705202312,
+        "secret_privacy_recall_minimum": 0.9468208092485549,
+        "selection_inventory_contract_sha256": "d2457d0cf5ee12682c1b3842fc37c7b5c4b1efff578b4e864f939ca50df6b084",
+        "slices": {
+          "synthetic-guard": {
+            "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+            "compatible_coverage_recall": 0.9749861033907726,
+            "epoch": 0,
+            "fixed_profile_precision_mean": 0.7124029677630679,
+            "framework_global_f1_diagnostic": {
+              "per_class_precision": {
+                "ADDRESS": 0.994453721452912,
+                "CARD_NUMBER": 0.845016687108222,
+                "CVC": 1.0,
+                "EMAIL": 0.6433376125993121,
+                "NAME": 0.5441627523388394,
+                "PHONE": 0.9702254619759019,
+                "SECRET": 0.8578614761670601,
+                "SENSITIVE_FIELD": 0.7865271046806583,
+                "SENSITIVE_IMAGE": 0.9954309773390287
+              },
+              "per_class_recall": {
+                "ADDRESS": 0.8965112246793641,
+                "CARD_NUMBER": 1.0,
+                "CVC": 0.8752563386767924,
+                "EMAIL": 0.9199239609298986,
+                "NAME": 1.0,
+                "PHONE": 1.0,
+                "SECRET": 0.5733703232235119,
+                "SENSITIVE_FIELD": 0.7591063109506649,
+                "SENSITIVE_IMAGE": 1.0
+              },
+              "threshold": 0.23623623623623624
+            },
+            "hard_negative_images": 200,
+            "hard_negative_images_with_masks": 5,
+            "hard_negative_mask_rate": 0.025,
+            "image_inventory_sha256": "27b8d61f7584e4283fc1cde2ce3979030d454cce4077d5ec7ee32263ec1c24f2",
+            "images": 1999,
+            "irrecoverable_misses": 1,
+            "map50": 0.9520919382774795,
+            "metric_basis": "runtime-top1-fixed-profile-v1",
+            "other_sensitive_compatible_recall_mean": 0.9749748743718593,
+            "other_sensitive_privacy_recall_mean": 0.9916541038525963,
+            "per_class_ap50": {
+              "ADDRESS": 0.9881483296336308,
+              "CARD_NUMBER": 0.9797594541871993,
+              "CVC": 0.9943027485452519,
+              "EMAIL": 0.9146028256363584,
+              "NAME": 0.9810427534768209,
+              "PHONE": 0.9949502487562188,
+              "SECRET": 0.856302607716334,
+              "SENSITIVE_FIELD": 0.8647184765455034,
+              "SENSITIVE_IMAGE": 0.995
+            },
+            "per_class_ap50_95": {
+              "ADDRESS": 0.856704738307009,
+              "CARD_NUMBER": 0.7470388377528421,
+              "CVC": 0.6664376668113985,
+              "EMAIL": 0.7395138557335939,
+              "NAME": 0.829183316190629,
+              "PHONE": 0.8106808160268273,
+              "SECRET": 0.6268379201694299,
+              "SENSITIVE_FIELD": 0.6461616504037729,
+              "SENSITIVE_IMAGE": 0.9530267643353418
+            },
+            "per_class_compatible_coverage_recall": {
+              "ADDRESS": 0.99,
+              "CARD_NUMBER": 0.985,
+              "CVC": 0.98,
+              "EMAIL": 0.89,
+              "NAME": 1.0,
+              "PHONE": 1.0,
+              "SECRET": 0.96,
+              "SENSITIVE_FIELD": 0.9698492462311558,
+              "SENSITIVE_IMAGE": 1.0
+            },
+            "per_class_fixed_profile_precision": {
+              "ADDRESS": 0.9548334284713212,
+              "CARD_NUMBER": 0.6819663859865062,
+              "CVC": 0.7062868033534031,
+              "EMAIL": 0.49218183632744555,
+              "NAME": 0.37419602263423246,
+              "PHONE": 0.8370432933501022,
+              "SECRET": 0.7207390139419234,
+              "SENSITIVE_FIELD": 0.6474391773296052,
+              "SENSITIVE_IMAGE": 0.9969407484730712
+            },
+            "per_class_fixed_profile_recall": {
+              "ADDRESS": 0.9513169184214362,
+              "CARD_NUMBER": 1.0,
+              "CVC": 1.0,
+              "EMAIL": 0.94,
+              "NAME": 1.0,
+              "PHONE": 1.0,
+              "SECRET": 0.89,
+              "SENSITIVE_FIELD": 0.8241206030150754,
+              "SENSITIVE_IMAGE": 1.0
+            },
+            "per_class_irrecoverable_misses": {
+              "ADDRESS": 1,
+              "CARD_NUMBER": 0,
+              "CVC": 0,
+              "EMAIL": 0,
+              "NAME": 0,
+              "PHONE": 0,
+              "SECRET": 0,
+              "SENSITIVE_FIELD": 0,
+              "SENSITIVE_IMAGE": 0
+            },
+            "per_class_privacy_coverage_recall": {
+              "ADDRESS": 0.99,
+              "CARD_NUMBER": 0.985,
+              "CVC": 1.0,
+              "EMAIL": 0.975,
+              "NAME": 1.0,
+              "PHONE": 1.0,
+              "SECRET": 0.975,
+              "SENSITIVE_FIELD": 0.9849246231155779,
+              "SENSITIVE_IMAGE": 1.0
+            },
+            "per_class_support": {
+              "ADDRESS": 200,
+              "CARD_NUMBER": 200,
+              "CVC": 200,
+              "EMAIL": 200,
+              "NAME": 200,
+              "PHONE": 200,
+              "SECRET": 200,
+              "SENSITIVE_FIELD": 199,
+              "SENSITIVE_IMAGE": 200
+            },
+            "predictions": 2626,
+            "predictions_per_image": 1.3136568284142072,
+            "preprofile_saturated_images": 0,
+            "privacy_coverage_recall": 0.9899944413563091,
+            "runtime_contract_sha256": "7c45e3144e1c5e6d5a3011fb737673addaf76fa4b664dfef999fd34f0cd6ea34",
+            "runtime_geometry_sha256": "2353652dd632c9568a6477a1537c688bca50d6a08ea978b12091589ba55ad943",
+            "schema_version": 1,
+            "secret_compatible_recall_minimum": 0.96,
+            "secret_privacy_recall_minimum": 0.975,
+            "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+            "truth": 1799
+          },
+          "webpii-guard": {
+            "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+            "compatible_coverage_recall": 0.9555754323196184,
+            "epoch": 0,
+            "fixed_profile_precision_mean": 0.6562276868597058,
+            "framework_global_f1_diagnostic": {
+              "per_class_precision": {
+                "ADDRESS": 0.8475807088793497,
+                "CARD_NUMBER": 0.935583160310679,
+                "CVC": 0.9790584297360544,
+                "EMAIL": 0.8911876934595216,
+                "NAME": 0.9311181961585187,
+                "PHONE": 0.9247812055152869,
+                "SECRET": 0.9883574730637203,
+                "SENSITIVE_FIELD": 0.9805560124275513,
+                "SENSITIVE_IMAGE": 0.9623589923882777
+              },
+              "per_class_recall": {
+                "ADDRESS": 0.88040587518934,
+                "CARD_NUMBER": 0.8563221944044369,
+                "CVC": 0.8684566121062676,
+                "EMAIL": 0.9094176851186196,
+                "NAME": 0.9088599555414417,
+                "PHONE": 0.9059152305542617,
+                "SECRET": 0.9128185187374195,
+                "SENSITIVE_FIELD": 0.9184491978609626,
+                "SENSITIVE_IMAGE": 0.7941176470588235
+              },
+              "threshold": 0.5195195195195195
+            },
+            "hard_negative_images": 26,
+            "hard_negative_images_with_masks": 17,
+            "hard_negative_mask_rate": 0.6538461538461539,
+            "image_inventory_sha256": "8d91ed97577aeba55e544e290fda1f46b34c6171487e529b74b9956d13d2999e",
+            "images": 1963,
+            "irrecoverable_misses": 345,
+            "map50": 0.9484585405857745,
+            "metric_basis": "runtime-top1-fixed-profile-v1",
+            "other_sensitive_compatible_recall_mean": 0.9478007133295551,
+            "other_sensitive_privacy_recall_mean": 0.9582606972046145,
+            "per_class_ap50": {
+              "ADDRESS": 0.8954833796331372,
+              "CARD_NUMBER": 0.9225713181967938,
+              "CVC": 0.9890767818753563,
+              "EMAIL": 0.947662172571756,
+              "NAME": 0.9492542453231334,
+              "PHONE": 0.9542993147559081,
+              "SECRET": 0.9879889808872295,
+              "SENSITIVE_FIELD": 0.9664823223094892,
+              "SENSITIVE_IMAGE": 0.9233083497191679
+            },
+            "per_class_ap50_95": {
+              "ADDRESS": 0.7322686324853434,
+              "CARD_NUMBER": 0.7748143896683427,
+              "CVC": 0.859983825293219,
+              "EMAIL": 0.8208336470470068,
+              "NAME": 0.811451005036228,
+              "PHONE": 0.7929547435966843,
+              "SECRET": 0.8820679500231675,
+              "SENSITIVE_FIELD": 0.8773881617884156,
+              "SENSITIVE_IMAGE": 0.5666291026280528
+            },
+            "per_class_compatible_coverage_recall": {
+              "ADDRESS": 0.9513724683869641,
+              "CARD_NUMBER": 0.9445086705202312,
+              "CVC": 0.9829721362229102,
+              "EMAIL": 0.9568655643421998,
+              "NAME": 0.9434741187678628,
+              "PHONE": 0.9692594317652539,
+              "SECRET": 1.0,
+              "SENSITIVE_FIELD": 0.9792780748663101,
+              "SENSITIVE_IMAGE": 0.8865546218487395
+            },
+            "per_class_fixed_profile_precision": {
+              "ADDRESS": 0.5616681007247267,
+              "CARD_NUMBER": 0.5518054805191267,
+              "CVC": 0.38628072696352006,
+              "EMAIL": 0.627282760603966,
+              "NAME": 0.7193542804327836,
+              "PHONE": 0.683903776527746,
+              "SECRET": 0.7900691177396101,
+              "SENSITIVE_FIELD": 0.703658361729888,
+              "SENSITIVE_IMAGE": 0.8820265764959845
+            },
+            "per_class_fixed_profile_recall": {
+              "ADDRESS": 0.915698581165827,
+              "CARD_NUMBER": 0.9317919075144508,
+              "CVC": 1.0,
+              "EMAIL": 0.9482386772106398,
+              "NAME": 0.9498253413782153,
+              "PHONE": 0.96040987424313,
+              "SECRET": 0.9849462365591398,
+              "SENSITIVE_FIELD": 0.9682058324556009,
+              "SENSITIVE_IMAGE": 0.823530493914045
+            },
+            "per_class_irrecoverable_misses": {
+              "ADDRESS": 241,
+              "CARD_NUMBER": 4,
+              "CVC": 0,
+              "EMAIL": 6,
+              "NAME": 77,
+              "PHONE": 6,
+              "SECRET": 0,
+              "SENSITIVE_FIELD": 8,
+              "SENSITIVE_IMAGE": 3
+            },
+            "per_class_privacy_coverage_recall": {
+              "ADDRESS": 0.9528117610774134,
+              "CARD_NUMBER": 0.9468208092485549,
+              "CVC": 1.0,
+              "EMAIL": 0.9618979151689432,
+              "NAME": 0.9549063194664973,
+              "PHONE": 0.9892873777363763,
+              "SECRET": 1.0,
+              "SENSITIVE_FIELD": 0.9872994652406417,
+              "SENSITIVE_IMAGE": 0.9033613445378151
+            },
+            "per_class_support": {
+              "ADDRESS": 9727,
+              "CARD_NUMBER": 865,
+              "CVC": 646,
+              "EMAIL": 1391,
+              "NAME": 3149,
+              "PHONE": 2147,
+              "SECRET": 465,
+              "SENSITIVE_FIELD": 1496,
+              "SENSITIVE_IMAGE": 238
+            },
+            "predictions": 29124,
+            "predictions_per_image": 14.836474783494651,
+            "preprofile_saturated_images": 0,
+            "privacy_coverage_recall": 0.9619856887298748,
+            "runtime_contract_sha256": "7c45e3144e1c5e6d5a3011fb737673addaf76fa4b664dfef999fd34f0cd6ea34",
+            "runtime_geometry_sha256": "2353652dd632c9568a6477a1537c688bca50d6a08ea978b12091589ba55ad943",
+            "schema_version": 1,
+            "secret_compatible_recall_minimum": 0.9445086705202312,
+            "secret_privacy_recall_minimum": 0.9468208092485549,
+            "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+            "truth": 20124
+          }
+        },
+        "threshold_profile": {
+          "ADDRESS": 0.099099,
+          "CARD_NUMBER": 0.079079,
+          "CVC": 0.009009,
+          "EMAIL": 0.099099,
+          "NAME": 0.099099,
+          "PHONE": 0.099099,
+          "SECRET": 0.079079,
+          "SENSITIVE_FIELD": 0.079079,
+          "SENSITIVE_IMAGE": 0.349349
+        },
+        "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e"
+      },
+      "used_for_checkpoint_selection": true
+    },
+    "selected_checkpoint_evaluation": {},
+    "selection": [
+      0.9468208092485549,
+      0.9759900650430919,
+      0.9445086705202312,
+      0.9652807678551956,
+      0.950275239431627,
+      -8.075065805954429
+    ]
+  },
+  "training_manifest": {
+    "path": "/vol/runs/plva-visual-agpl-ats-v3/visual/training-safe-head-v10/training_manifest.json",
+    "sha256": "a2e811a9ca01b7358d55102911967c3a8534e4171674386984b3fe12df9ddc24"
+  }
+}

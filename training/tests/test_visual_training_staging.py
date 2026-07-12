@@ -15,6 +15,7 @@ from training.visual.prepare_supplemental import (
 from training.visual.prepare_webpii import DETECTOR_CLASSES
 from training.visual.stage_training_dataset import (
     persist_stage_metadata,
+    publish_verified_tree,
     stage_composed_dataset,
     verify_persisted_stage_metadata,
 )
@@ -220,12 +221,38 @@ def write_composed(root: Path) -> tuple[Path, Path, dict[str, Path]]:
 
 
 class LocalVisualDatasetStagingTests(unittest.TestCase):
+    def test_publish_verified_tree_is_atomic_and_hash_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "local"
+            (source / "nested").mkdir(parents=True)
+            (source / "nested/a.bin").write_bytes(b"a")
+            (source / "b.bin").write_bytes(b"b")
+            destination = root / "volume/prepared"
+
+            first = publish_verified_tree(
+                source, destination, copy_workers=4
+            )
+            self.assertEqual(first["files"], 2)
+            self.assertEqual((destination / "nested/a.bin").read_bytes(), b"a")
+            with self.assertRaises(FileExistsError):
+                publish_verified_tree(source, destination, copy_workers=4)
+
+            (source / "b.bin").write_bytes(b"updated")
+            second = publish_verified_tree(
+                source, destination, force=True, copy_workers=4
+            )
+            self.assertNotEqual(first["tree_sha256"], second["tree_sha256"])
+            self.assertEqual((destination / "b.bin").read_bytes(), b"updated")
+
     def test_stage_rewrites_exact_contract_and_keeps_supplemental_test(self) -> None:
         import yaml
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             dataset_yaml, source_manifest, roots = write_composed(root / "volume")
+            source_cache = roots["synthetic"] / "labels/validation.cache"
+            source_cache.write_bytes(b"derived-ultralytics-cache")
             local = root / "ephemeral/run"
             result = stage_composed_dataset(
                 dataset_yaml,
@@ -236,6 +263,8 @@ class LocalVisualDatasetStagingTests(unittest.TestCase):
             )
             self.assertEqual(result["mode"], "copied-and-verified-local-stage")
             self.assertEqual(result["metadata"]["copy_workers"], 64)
+            self.assertTrue(source_cache.is_file())
+            self.assertFalse((local / "synthetic/labels/validation.cache").exists())
             local_dataset = yaml.safe_load(
                 Path(result["dataset_yaml"]).read_text(encoding="utf-8")
             )

@@ -7,11 +7,28 @@ import json
 import math
 import os
 import shutil
+import statistics
+import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from training.visual.prepare_webpii import DETECTOR_CLASSES
+from training.visual.project_classifier_checkpoint import CLASSIFIER_TENSOR_NAMES
+from training.visual.safe_finetune import (
+    PROTECTED_CLASSIFIER_CLASSES,
+    PROTECTED_CLASSIFIER_ROWS,
+)
+from training.visual.runtime_safety import (
+    RUNTIME_SELECTION_POLICY,
+    RUNTIME_SELECTION_POLICY_NAME,
+    consider_runtime_selection_candidate,
+    evaluate_first_epoch_calibrated_runtime_canary,
+    evaluate_runtime_release_gate,
+    runtime_selection_score,
+    validate_runtime_selection_candidate,
+)
 
 
 SECRET_VISUAL_CLASSES = ("CARD_NUMBER", "CVC", "SECRET")
@@ -19,13 +36,20 @@ OTHER_SENSITIVE_CLASSES = tuple(
     name for name in DETECTOR_CLASSES if name not in SECRET_VISUAL_CLASSES
 )
 SYNTHETIC_VALIDATION_SOURCE = "screen-native-synthetic-validation"
+CALIBRATED_RUNTIME_SELECTION_SOURCE = (
+    "calibrated-runtime-synthetic-and-webpii-train-guards"
+)
 PUBLISHED_TEST_SOURCE = "WebPII/test"
 EXPECTED_SUPPLEMENTAL_TEST_RECORDS = 200
 ULTRALYTICS_RUN_NAME = "ultralytics-run"
 SAFETY_PROGRESS_NAME = "safety-selection-progress.json"
 SEED_INCUMBENT_NAME = "seed-incumbent.json"
+SAFETY_THRESHOLDS_NAME = "safety-best-thresholds.json"
+INVOCATION_STATE_NAME = "training-invocation-state.json"
+REPLAY_TRAINING_KIND = "deterministic-source-class-aware-replay-list"
+PRETRAIN_BUDGET_PAUSE_STATUS = "budget-paused-before-training"
 SELECTION_EPSILON = 1e-12
-SAFETY_SELECTION_POLICY = {
+LEGACY_GLOBAL_F1_SELECTION_POLICY = {
     "schema_version": 1,
     "meaningful_secret_gain": 0.01,
     "maximum_individual_secret_drop": 0.01,
@@ -37,6 +61,7 @@ SAFETY_SELECTION_POLICY = {
     "precision_tiebreak_requires_no_recall_regression": True,
     "epsilon": SELECTION_EPSILON,
 }
+SAFETY_SELECTION_POLICY = RUNTIME_SELECTION_POLICY
 # Ultralytics' natural-image defaults include 50% horizontal flips, 100%
 # mosaic, +/-50% scale, +/-10% translation, and high saturation/value jitter.
 # Those transforms can mirror text, tile unrelated pages, or destroy the layout
@@ -70,17 +95,43 @@ SCREENSHOT_AUGMENTATION_POLICY: dict[str, float | int | str] = {
 # That auto policy destabilized the warm-started detector as its default
 # three-epoch warmup approached a 0.03 head LR. These settings are explicit and
 # immutable across resume so framework defaults cannot silently re-enter.
+STABLE_OPTIMIZER_POLICY_NAME = "safe-output-classifier-adamw-v5-fp32-trust-region"
 STABLE_OPTIMIZER_POLICY: dict[str, float | int | str | bool] = {
     "optimizer": "AdamW",
-    "lr0": 5e-4,
+    # v8 at 1e-6 improved aggregate AP but moved the box-regression branch and
+    # introduced 31 WebPII low-floor misses. v9 froze geometry, but serializing
+    # its 1e-7 update through Ultralytics' FP16 EMA checkpoint quantized the
+    # remaining classifier changes into ~6.1e-5 steps and lost five ADDRESS
+    # proposals. Keep the small trust region and persist a projected FP32 EMA.
+    "lr0": 1e-7,
     "lrf": 0.1,
     "momentum": 0.9,
-    "weight_decay": 5e-4,
+    "weight_decay": 0.0,
     "warmup_epochs": 1.0,
     "warmup_momentum": 0.8,
     "warmup_bias_lr": 0.0,
     "cos_lr": True,
     "nbs": 64,
+    "cls_pw": 0.0,
+}
+
+SAFE_FINE_TUNE_POLICY: dict[str, Any] = {
+    "schema_version": 2,
+    "mode": "final-class-output-only-projected-fp32-canary",
+    "freeze_layers": list(range(23)),
+    "trainable_layer": 23,
+    "trainable_parameters": list(CLASSIFIER_TENSOR_NAMES),
+    "protected_classifier_classes": list(PROTECTED_CLASSIFIER_CLASSES),
+    "protected_classifier_rows": list(PROTECTED_CLASSIFIER_ROWS),
+    "protected_gradient_policy": "zero-before-optimizer-step",
+    "shared_classification_features": "frozen",
+    "box_regression": "frozen",
+    "batchnorm_running_stats": "frozen-via-eval-every-batch",
+    "batchnorm_affine_parameters": "frozen",
+    "checkpoint_ema_precision": "float32",
+    "checkpoint_frozen_state_projection": "exact-reference-copy",
+    "immutable_seed_pre_step_state_parity": True,
+    "canary_maximum_individual_recall_drop": 0.05,
 }
 
 MONITORING_POLICY = {
@@ -88,8 +139,37 @@ MONITORING_POLICY = {
     "map50_absolute_drop": 0.10,
     "validation_classification_loss_multiple": 2.0,
     "consecutive_epochs": 2,
-    "action": "manual-review-and-stop; retry with lr0=0.00025",
+    "action": "manual-review-and-stop; never resume a failed canary",
 }
+
+
+class PlannedTrainingPause(RuntimeError):
+    """Stop after a durable epoch without letting Ultralytics strip last.pt."""
+
+    def __init__(self, reason: str, details: dict[str, Any]) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.details = details
+
+
+def _finite_float(value: Any, context: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        try:
+            value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(f"{context} is not numeric") from exc
+    value = float(value)
+    if not math.isfinite(value):
+        raise RuntimeError(f"{context} is not finite")
+    return value
+
+
+def evaluate_first_epoch_canary(
+    seed_incumbent: dict[str, Any], record: dict[str, Any]
+) -> dict[str, Any]:
+    """Require epoch one to pass independently recomputed runtime gates."""
+
+    return evaluate_first_epoch_calibrated_runtime_canary(seed_incumbent, record)
 
 
 def sha256_file(path: Path) -> str:
@@ -273,7 +353,7 @@ def consider_safety_candidate(
         "individual_secret_drop": all(
             candidate["per_class_recall"][name]
             >= incumbent["per_class_recall"][name]
-            - SAFETY_SELECTION_POLICY["maximum_individual_secret_drop"]
+            - LEGACY_GLOBAL_F1_SELECTION_POLICY["maximum_individual_secret_drop"]
             - eps
             for name in SECRET_VISUAL_CLASSES
         ),
@@ -281,7 +361,7 @@ def consider_safety_candidate(
             "other_sensitive_recall_mean"
         ]
         >= incumbent["other_sensitive_recall_mean"]
-        - SAFETY_SELECTION_POLICY[
+        - LEGACY_GLOBAL_F1_SELECTION_POLICY[
             "maximum_other_sensitive_mean_drop_from_incumbent"
         ]
         - eps,
@@ -289,20 +369,22 @@ def consider_safety_candidate(
             "other_sensitive_recall_mean"
         ]
         >= historical_other
-        - SAFETY_SELECTION_POLICY[
+        - LEGACY_GLOBAL_F1_SELECTION_POLICY[
             "maximum_other_sensitive_mean_drop_from_high_water"
         ]
         - eps,
         "individual_other_sensitive_drop": all(
             candidate["per_class_recall"][name]
             >= incumbent["per_class_recall"][name]
-            - SAFETY_SELECTION_POLICY["maximum_individual_other_sensitive_drop"]
+            - LEGACY_GLOBAL_F1_SELECTION_POLICY[
+                "maximum_individual_other_sensitive_drop"
+            ]
             - eps
             for name in OTHER_SENSITIVE_CLASSES
         ),
         "precision_mean_drop": candidate["precision_mean"]
         >= incumbent["precision_mean"]
-        - SAFETY_SELECTION_POLICY["maximum_precision_mean_drop"]
+        - LEGACY_GLOBAL_F1_SELECTION_POLICY["maximum_precision_mean_drop"]
         - eps,
     }
     hard_gates_passed = all(gates.values())
@@ -314,7 +396,7 @@ def consider_safety_candidate(
     reason = "rejected-no-meaningful-safe-improvement"
     selected = False
     if hard_gates_passed and secret_delta >= (
-        SAFETY_SELECTION_POLICY["meaningful_secret_gain"] - eps
+        LEGACY_GLOBAL_F1_SELECTION_POLICY["meaningful_secret_gain"] - eps
     ):
         selected = True
         reason = "selected-meaningful-secret-improvement"
@@ -322,9 +404,12 @@ def consider_safety_candidate(
         hard_gates_passed
         and secret_delta >= -eps
         and secret_delta
-        < SAFETY_SELECTION_POLICY["meaningful_secret_gain"] - eps
+        < LEGACY_GLOBAL_F1_SELECTION_POLICY["meaningful_secret_gain"] - eps
         and other_delta
-        >= SAFETY_SELECTION_POLICY["tie_band_other_sensitive_mean_gain"] - eps
+        >= LEGACY_GLOBAL_F1_SELECTION_POLICY[
+            "tie_band_other_sensitive_mean_gain"
+        ]
+        - eps
     ):
         selected = True
         reason = "selected-tie-band-other-sensitive-improvement"
@@ -460,6 +545,151 @@ def _expected_split_paths(
     ]
 
 
+def _validate_replay_training_contract(
+    replay_path: Path,
+    source_manifest: dict[str, Any],
+    source_manifest_path: Path,
+) -> None:
+    """Bind a replay list to its generated manifest and approved train roots."""
+
+    contract = source_manifest.get("training_replay")
+    if not isinstance(contract, dict):
+        raise RuntimeError("replay-backed training YAML lacks a replay contract")
+    if (
+        contract.get("schema_version") != 1
+        or contract.get("kind") != REPLAY_TRAINING_KIND
+        or contract.get("physical_batch_guarantee") is not False
+    ):
+        raise RuntimeError("detector replay contract is unsupported or misleading")
+    declared_list = contract.get("train_list")
+    if (
+        not isinstance(declared_list, str)
+        or Path(declared_list).resolve() != replay_path.resolve()
+        or replay_path.is_symlink()
+        or not replay_path.is_file()
+    ):
+        raise RuntimeError("detector replay train list path is invalid")
+    if contract.get("train_list_sha256") != sha256_file(replay_path):
+        raise RuntimeError("detector replay train list SHA-256 mismatch")
+
+    manifest_value = contract.get("manifest")
+    if not isinstance(manifest_value, str):
+        raise RuntimeError("detector replay manifest path is missing")
+    manifest_path = Path(manifest_value)
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise RuntimeError("detector replay manifest is missing or unsafe")
+    if contract.get("manifest_sha256") != sha256_file(manifest_path):
+        raise RuntimeError("detector replay manifest SHA-256 mismatch")
+    replay = _read_json_object(manifest_path, "detector replay manifest")
+    if (
+        replay.get("schema_version") != 1
+        or replay.get("kind") != REPLAY_TRAINING_KIND
+        or replay.get("classes") != list(DETECTOR_CLASSES)
+        or replay.get("configuration") != contract.get("configuration")
+        or replay.get("configuration_sha256")
+        != contract.get("configuration_sha256")
+    ):
+        raise RuntimeError("detector replay manifest contract changed")
+    output = replay.get("output")
+    consumer = replay.get("consumer_contract")
+    if (
+        not isinstance(output, dict)
+        or output.get("train_list") != str(replay_path.resolve())
+        or output.get("sha256") != sha256_file(replay_path)
+        or output.get("records") != contract.get("records")
+        or not isinstance(consumer, dict)
+        or consumer.get("physical_batch_guarantee") is not False
+    ):
+        raise RuntimeError("detector replay output contract changed")
+
+    runtime_selection = source_manifest.get("runtime_selection")
+    selection_provenance = None
+    if runtime_selection is not None:
+        from training.visual.runtime_selection_evaluator import (
+            load_validated_runtime_selection_contract,
+        )
+
+        if not isinstance(runtime_selection, dict):
+            raise RuntimeError("detector runtime selection contract is malformed")
+        selection_path_value = runtime_selection.get("contract")
+        if not isinstance(selection_path_value, str):
+            raise RuntimeError("detector runtime selection contract path is missing")
+        selection_path = Path(selection_path_value)
+        if (
+            selection_path.is_symlink()
+            or not selection_path.is_file()
+            or runtime_selection.get("contract_sha256")
+            != sha256_file(selection_path)
+            or contract.get("runtime_selection_contract_sha256")
+            != sha256_file(selection_path)
+        ):
+            raise RuntimeError("detector replay runtime selection binding changed")
+        selection_provenance = load_validated_runtime_selection_contract(
+            selection_path
+        )
+        eligible_records = len(selection_provenance["webpii"]["eligible"])
+        if runtime_selection.get("webpii_train_eligible_records") != eligible_records:
+            raise RuntimeError("detector replay WebPII eligibility count changed")
+
+    sources = source_manifest.get("sources")
+    if not isinstance(sources, dict):
+        raise RuntimeError("detector replay source roots are missing")
+    source_roots: dict[str, Path] = {}
+    allowed_roots: list[Path] = []
+    for source_name in ("webpii", "synthetic", "supplemental_ats"):
+        source = sources.get(source_name)
+        if not isinstance(source, dict):
+            raise RuntimeError(f"detector replay lacks its {source_name} source")
+        candidates = _declared_manifest_candidates(
+            source.get("manifest"), source_manifest_path
+        )
+        existing = [
+            path for path in candidates if not path.is_symlink() and path.is_file()
+        ]
+        if len(existing) != 1:
+            raise RuntimeError(f"detector replay {source_name} manifest is ambiguous")
+        source_root = existing[0].parent.resolve()
+        source_roots[source_name] = source_root
+        allowed_roots.append(source_root / "images/train")
+
+    if selection_provenance is not None and (
+        selection_provenance["webpii"]["source_root"]
+        != source_roots["webpii"]
+        or selection_provenance["synthetic"]["source_root"]
+        != source_roots["synthetic"]
+    ):
+        raise RuntimeError(
+            "runtime selection partitions are not bound to the composed sources"
+        )
+
+    try:
+        rows = replay_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RuntimeError("detector replay train list is not UTF-8") from exc
+    if len(rows) != contract.get("records") or not rows:
+        raise RuntimeError("detector replay train list record count changed")
+    resolved_rows: list[Path] = []
+    for row in rows:
+        if not row or "\0" in row:
+            raise RuntimeError("detector replay train list contains an unsafe row")
+        image = Path(row)
+        if not image.is_absolute() or not any(
+            image.resolve().is_relative_to(root.resolve()) for root in allowed_roots
+        ):
+            raise RuntimeError("detector replay image escapes approved train roots")
+        if "test" in {part.lower() for part in image.parts}:
+            raise RuntimeError("detector replay contains a held-out test image")
+        resolved_rows.append(image.resolve())
+    if selection_provenance is not None:
+        from training.visual.runtime_selection_evaluator import (
+            validate_replay_against_runtime_selection,
+        )
+
+        validate_replay_against_runtime_selection(
+            resolved_rows, selection_provenance
+        )
+
+
 def validate_composed_dataset_contract(
     dataset: dict[str, Any],
     source_manifest: dict[str, Any],
@@ -473,10 +703,20 @@ def validate_composed_dataset_contract(
         )
     if source_manifest.get("test_used_for_checkpoint_selection") is not False:
         raise RuntimeError("WebPII test may not be used for checkpoint selection")
-    if source_manifest.get("selection_data") != SYNTHETIC_VALIDATION_SOURCE:
-        raise RuntimeError(
-            "checkpoint selection must use screen-native synthetic validation"
-        )
+    runtime_selection = source_manifest.get("runtime_selection")
+    expected_selection = (
+        CALIBRATED_RUNTIME_SELECTION_SOURCE
+        if isinstance(runtime_selection, dict)
+        else SYNTHETIC_VALIDATION_SOURCE
+    )
+    if source_manifest.get("selection_data") != expected_selection:
+        raise RuntimeError("checkpoint selection source contract changed")
+    if isinstance(runtime_selection, dict) and (
+        runtime_selection.get("kind")
+        != "calibrated-runtime-selection-contract"
+        or runtime_selection.get("published_test_used") is not False
+    ):
+        raise RuntimeError("calibrated runtime selection contract is unsafe")
     if source_manifest.get("test_source") != PUBLISHED_TEST_SOURCE:
         raise RuntimeError("published detector test source must be WebPII/test")
     if "train" not in dataset or "val" not in dataset:
@@ -525,6 +765,14 @@ def validate_composed_dataset_contract(
         "test",
         "WebPII",
     )
+    train_paths = _split_paths(dataset["train"], "training YAML train")
+    resolved_train = [_resolve_split_path(dataset, path) for path in train_paths]
+    if len(resolved_train) == 1 and resolved_train[0].suffix.lower() == ".txt":
+        _validate_replay_training_contract(
+            resolved_train[0], source_manifest, source_manifest_path
+        )
+    elif source_manifest.get("training_replay") is not None:
+        raise RuntimeError("replay contract exists but training YAML bypasses it")
     if actual_val not in expected_val:
         raise RuntimeError(
             "training YAML val does not point at the composed synthetic validation split"
@@ -777,6 +1025,209 @@ def _checkpoint_record(value: Any) -> dict[str, Any]:
     }
 
 
+def persist_projected_fp32_ema_checkpoint(
+    reference_model: Any,
+    trainer: Any,
+    checkpoint_path: Path,
+    *,
+    trainable_parameter_names: tuple[str, ...],
+    protected_class_rows: tuple[int, ...],
+    torch_module: Any,
+) -> dict[str, Any]:
+    """Replace Ultralytics' quantized EMA with an exact-boundary FP32 EMA.
+
+    Ultralytics 8.4.92 serializes every training EMA as FP16. That is normally
+    benign, but its roughly 6e-5 weight steps are hundreds of times larger than
+    this detector's 1e-7 trust-region learning rate. Build the durable
+    checkpoint from the live FP32 EMA, then copy every non-trainable tensor from
+    the immutable invocation reference, including protected class rows inside
+    otherwise trainable tensors. The resulting checkpoint is both resumable and
+    safe to evaluate: only approved unprotected class-output rows can differ,
+    and frozen EMA arithmetic drift cannot leak through serialization.
+    """
+
+    if checkpoint_path.is_symlink() or not checkpoint_path.is_file():
+        raise RuntimeError("Ultralytics checkpoint is missing or unsafe")
+    approved = set(trainable_parameter_names)
+    if approved != set(CLASSIFIER_TENSOR_NAMES):
+        raise RuntimeError("FP32 checkpoint projection requires exact trainable names")
+    if (
+        tuple(protected_class_rows) != PROTECTED_CLASSIFIER_ROWS
+        or not protected_class_rows
+        or len(set(protected_class_rows)) != len(protected_class_rows)
+        or any(
+            type(row) is not int or row < 0 or row >= len(DETECTOR_CLASSES)
+            for row in protected_class_rows
+        )
+    ):
+        raise RuntimeError("FP32 checkpoint projection protected rows are invalid")
+    reference_state_fn = getattr(reference_model, "state_dict", None)
+    ema_holder = getattr(trainer, "ema", None)
+    live_ema = getattr(ema_holder, "ema", None)
+    if not callable(reference_state_fn) or live_ema is None:
+        raise RuntimeError("FP32 checkpoint projection has no reference or live EMA")
+    live_state_fn = getattr(live_ema, "state_dict", None)
+    if not callable(live_state_fn):
+        raise RuntimeError("FP32 checkpoint projection live EMA has no state_dict")
+
+    projected_ema = deepcopy(live_ema).float().cpu()
+    reference_state = reference_state_fn()
+    projected_state = projected_ema.state_dict()
+    if set(reference_state) != set(projected_state):
+        raise RuntimeError("FP32 checkpoint projection state inventory changed")
+    if not approved <= set(projected_state):
+        raise RuntimeError("FP32 checkpoint projection trainable inventory changed")
+
+    projected_frozen_tensors = 0
+    projected_frozen_elements = 0
+    projected_protected_rows = 0
+    with torch_module.no_grad():
+        for name in sorted(projected_state):
+            expected = reference_state[name].detach().cpu()
+            actual = projected_state[name]
+            if tuple(expected.shape) != tuple(actual.shape):
+                raise RuntimeError(
+                    f"FP32 checkpoint projection shape changed for {name}"
+                )
+            if name in approved:
+                if not actual.shape or int(actual.shape[0]) != len(DETECTOR_CLASSES):
+                    raise RuntimeError(
+                        f"FP32 checkpoint projection class rows changed for {name}"
+                    )
+                for row in protected_class_rows:
+                    actual[row].copy_(expected[row])
+                    projected_protected_rows += 1
+                continue
+            if str(expected.dtype) != str(actual.dtype):
+                raise RuntimeError(
+                    f"FP32 checkpoint projection dtype changed for {name}"
+                )
+            actual.copy_(expected)
+            projected_frozen_tensors += 1
+            projected_frozen_elements += int(expected.numel())
+
+    floating_tensors = [
+        tensor
+        for tensor in projected_state.values()
+        if bool(getattr(tensor, "is_floating_point")())
+    ]
+    if not floating_tensors or any(
+        str(tensor.dtype) != "torch.float32" for tensor in floating_tensors
+    ):
+        raise RuntimeError("projected checkpoint EMA is not fully FP32")
+
+    original_sha256 = sha256_file(checkpoint_path)
+    try:
+        checkpoint = torch_module.load(
+            str(checkpoint_path), map_location="cpu", weights_only=False
+        )
+    except Exception as exc:
+        raise RuntimeError("Ultralytics checkpoint could not be loaded") from exc
+    if (
+        not isinstance(checkpoint, dict)
+        or checkpoint.get("epoch") != int(trainer.epoch)
+        or checkpoint.get("optimizer") is None
+        or checkpoint.get("scaler") is None
+    ):
+        raise RuntimeError("Ultralytics checkpoint is not safely resumable")
+    checkpoint["ema"] = projected_ema
+    temporary = checkpoint_path.with_name(
+        f".{checkpoint_path.name}.fp32-partial-{os.getpid()}"
+    )
+    temporary.unlink(missing_ok=True)
+    try:
+        torch_module.save(checkpoint, str(temporary))
+        if not temporary.is_file():
+            raise RuntimeError("projected FP32 checkpoint was not written")
+        temporary.replace(checkpoint_path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+    try:
+        persisted = torch_module.load(
+            str(checkpoint_path), map_location="cpu", weights_only=False
+        )
+    except Exception as exc:
+        raise RuntimeError("projected FP32 checkpoint could not be reloaded") from exc
+    persisted_ema = persisted.get("ema") if isinstance(persisted, dict) else None
+    persisted_state_fn = getattr(persisted_ema, "state_dict", None)
+    if not callable(persisted_state_fn):
+        raise RuntimeError("projected FP32 checkpoint has no EMA state")
+    persisted_state = persisted_state_fn()
+    if set(persisted_state) != set(reference_state):
+        raise RuntimeError("projected FP32 checkpoint state inventory changed on disk")
+
+    changed_trainable: list[str] = []
+    changed_frozen: list[str] = []
+    protected_row_mismatches: list[dict[str, Any]] = []
+    non_fp32_floating: list[str] = []
+    for name in sorted(reference_state):
+        expected = reference_state[name].detach().cpu()
+        actual = persisted_state[name].detach().cpu()
+        same = (
+            tuple(expected.shape) == tuple(actual.shape)
+            and str(expected.dtype) == str(actual.dtype)
+            and bool(expected.equal(actual))
+        )
+        if name in approved:
+            if not same:
+                changed_trainable.append(name)
+            for row in protected_class_rows:
+                expected_row = expected[row]
+                actual_row = actual[row]
+                if (
+                    tuple(expected_row.shape) != tuple(actual_row.shape)
+                    or str(expected_row.dtype) != str(actual_row.dtype)
+                    or not bool(expected_row.equal(actual_row))
+                ):
+                    protected_row_mismatches.append(
+                        {
+                            "tensor": name,
+                            "row": row,
+                            "class": DETECTOR_CLASSES[row],
+                        }
+                    )
+        elif not same:
+            changed_frozen.append(name)
+        if bool(getattr(actual, "is_floating_point")()) and str(actual.dtype) != (
+            "torch.float32"
+        ):
+            non_fp32_floating.append(name)
+    violations: list[str] = []
+    if changed_frozen:
+        violations.append("projected checkpoint changed frozen tensors")
+    if non_fp32_floating:
+        violations.append("projected checkpoint contains non-FP32 floating tensors")
+    if protected_row_mismatches:
+        violations.append("projected checkpoint changed protected classifier rows")
+    audit = {
+        "schema_version": 1,
+        "kind": "projected-full-precision-ema-checkpoint",
+        "checkpoint": str(checkpoint_path),
+        "original_ultralytics_fp16_sha256": original_sha256,
+        "checkpoint_sha256": sha256_file(checkpoint_path),
+        "approved_trainable_parameters": sorted(approved),
+        "changed_trainable_tensors": changed_trainable,
+        "trainable_change_observed": bool(changed_trainable),
+        "changed_frozen_tensors": changed_frozen,
+        "protected_classes": [
+            DETECTOR_CLASSES[row] for row in protected_class_rows
+        ],
+        "protected_class_rows": list(protected_class_rows),
+        "protected_row_mismatches": protected_row_mismatches,
+        "non_fp32_floating_tensors": non_fp32_floating,
+        "projected_frozen_tensors": projected_frozen_tensors,
+        "projected_frozen_elements": projected_frozen_elements,
+        "projected_protected_rows": projected_protected_rows,
+        "floating_tensors": len(floating_tensors),
+        "violations": violations,
+        "passed": not violations,
+    }
+    if violations:
+        raise RuntimeError("FP32 checkpoint projection failed: " + "; ".join(violations))
+    return audit
+
+
 def _canonical_json_sha256(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -792,6 +1243,45 @@ def _read_json_object(path: Path, context: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise RuntimeError(f"{context} must contain a JSON object")
     return value
+
+
+def _write_json_object_atomic(path: Path, value: dict[str, Any]) -> None:
+    """Write one JSON object without exposing a partially written state file."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.partial-{os.getpid()}")
+    temporary.write_text(
+        json.dumps(value, indent=2, sort_keys=True, default=float) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def write_selected_runtime_profile(
+    output_dir: Path, candidate: dict[str, Any]
+) -> Path:
+    normalized = validate_runtime_selection_candidate(candidate)
+    path = output_dir / SAFETY_THRESHOLDS_NAME
+    _write_json_object_atomic(
+        path,
+        {
+            "schema_version": 1,
+            "metric_basis": RUNTIME_SELECTION_POLICY_NAME,
+            "checkpoint_sha256": normalized["checkpoint_sha256"],
+            "threshold_profile": normalized["threshold_profile"],
+            "threshold_profile_sha256": normalized[
+                "threshold_profile_sha256"
+            ],
+            "calibration_contract_sha256": normalized[
+                "calibration_contract_sha256"
+            ],
+            "selection_inventory_contract_sha256": normalized[
+                "selection_inventory_contract_sha256"
+            ],
+            "calibration_evidence": normalized["calibration_evidence"],
+        },
+    )
+    return path
 
 
 def build_training_resume_contract(
@@ -825,6 +1315,51 @@ def build_training_resume_contract(
         ) != 64:
             raise RuntimeError("local staging source-contract hash is invalid")
         staging_sha256 = sha256_file(staging_path)
+    source_document = _read_json_object(
+        args.source_manifest, "detector source manifest"
+    )
+    runtime_selection_path_value = getattr(
+        args, "runtime_selection_contract", None
+    )
+    if runtime_selection_path_value is None:
+        raise RuntimeError("calibrated runtime selection contract is required")
+    runtime_selection_path = Path(runtime_selection_path_value)
+    runtime_selection_source = source_document.get("runtime_selection")
+    if (
+        runtime_selection_path.is_symlink()
+        or not runtime_selection_path.is_file()
+        or not isinstance(runtime_selection_source, dict)
+        or runtime_selection_source.get("published_test_used") is not False
+        or runtime_selection_source.get("contract_sha256")
+        != sha256_file(runtime_selection_path)
+    ):
+        raise RuntimeError("calibrated runtime selection contract is invalid")
+    runtime_selection_contract = {
+        "path": str(runtime_selection_path.resolve()),
+        "sha256": sha256_file(runtime_selection_path),
+        "policy_name": RUNTIME_SELECTION_POLICY_NAME,
+        "policy_sha256": _canonical_json_sha256(RUNTIME_SELECTION_POLICY),
+    }
+    replay = source_document.get("training_replay")
+    replay_contract = None
+    if replay is not None:
+        if not isinstance(replay, dict):
+            raise RuntimeError("detector replay contract must be an object")
+        replay_manifest = Path(str(replay.get("manifest", "")))
+        replay_list = Path(str(replay.get("train_list", "")))
+        if (
+            replay_manifest.is_symlink()
+            or replay_list.is_symlink()
+            or not replay_manifest.is_file()
+            or not replay_list.is_file()
+        ):
+            raise RuntimeError("detector replay artifacts are missing or unsafe")
+        replay_contract = {
+            "manifest_sha256": sha256_file(replay_manifest),
+            "train_list_sha256": sha256_file(replay_list),
+            "configuration_sha256": replay.get("configuration_sha256"),
+            "records": replay.get("records"),
+        }
     return {
         "run_id": getattr(args, "run_id", None),
         "dataset_yaml_sha256": sha256_file(args.dataset_yaml),
@@ -838,6 +1373,11 @@ def build_training_resume_contract(
         "optimizer_policy_sha256": _canonical_json_sha256(
             STABLE_OPTIMIZER_POLICY
         ),
+        "safe_fine_tune_policy_sha256": _canonical_json_sha256(
+            SAFE_FINE_TUNE_POLICY
+        ),
+        "runtime_selection_contract": runtime_selection_contract,
+        "replay_contract": replay_contract,
         "attempt_id": getattr(args, "attempt_id", "default"),
         "attempt_manifest_sha256": getattr(args, "attempt_manifest_sha256", None),
         "seed_checkpoint_sha256": sha256_file(args.base_checkpoint),
@@ -878,6 +1418,21 @@ def validate_resume_data_contract(
             or str(Path(path).resolve().parent) != contract.get("local_stage_root")
         ):
             raise RuntimeError(f"visual resume {context} does not match the run ID")
+    runtime_selection = contract.get("runtime_selection_contract")
+    runtime_selection_path = Path(
+        str(getattr(args, "runtime_selection_contract", ""))
+    )
+    if (
+        not isinstance(runtime_selection, dict)
+        or runtime_selection_path.is_symlink()
+        or not runtime_selection_path.is_file()
+        or runtime_selection.get("path") != str(runtime_selection_path.resolve())
+        or runtime_selection.get("sha256") != sha256_file(runtime_selection_path)
+        or runtime_selection.get("policy_name") != RUNTIME_SELECTION_POLICY_NAME
+        or runtime_selection.get("policy_sha256")
+        != _canonical_json_sha256(RUNTIME_SELECTION_POLICY)
+    ):
+        raise RuntimeError("visual resume runtime selection contract changed")
 
     staging = getattr(args, "data_staging", None)
     if not isinstance(staging, dict):
@@ -895,7 +1450,27 @@ def validate_resume_data_contract(
             args.output_dir / "dataset-staging-manifest.json",
             contract["staging_manifest_sha256"],
         ),
+        "runtime_selection_contract": (
+            args.output_dir / "staged-runtime-selection-contract.json",
+            runtime_selection["sha256"],
+        ),
     }
+    replay_contract = contract.get("replay_contract")
+    if replay_contract is not None:
+        if not isinstance(replay_contract, dict):
+            raise RuntimeError("visual resume replay contract is invalid")
+        expected.update(
+            {
+                "replay_manifest": (
+                    args.output_dir / "staged-replay-manifest.json",
+                    replay_contract.get("manifest_sha256"),
+                ),
+                "replay_train_list": (
+                    args.output_dir / "staged-replay-train-list.txt",
+                    replay_contract.get("train_list_sha256"),
+                ),
+            }
+        )
     for name, (path, current_hash) in expected.items():
         declared_path = staging.get(f"{name}_path")
         declared_hash = staging.get(f"{name}_sha256")
@@ -941,7 +1516,7 @@ def _validated_progress_checkpoint(
 def _restore_selection_history(
     progress: dict[str, Any]
 ) -> tuple[
-    list[dict[str, Any]], tuple[float, float, float], dict[str, Any], dict[str, Any]
+    list[dict[str, Any]], tuple[float, ...], dict[str, Any], dict[str, Any]
 ]:
     progress_epoch = progress.get("epoch")
     history = progress.get("history")
@@ -952,12 +1527,8 @@ def _restore_selection_history(
     seed_incumbent = progress.get("seed_incumbent")
     if not isinstance(seed_incumbent, dict):
         raise RuntimeError("resume progress seed incumbent is missing")
-    seed_decision, state = consider_safety_candidate(
-        None,
-        epoch=-1,
-        recall_by_class=seed_incumbent.get("per_class_recall"),
-        precision_by_class=seed_incumbent.get("per_class_precision"),
-        missing_classes=seed_incumbent.get("missing_validation_classes", []),
+    seed_decision, state = consider_runtime_selection_candidate(
+        None, seed_incumbent
     )
     if not seed_decision["selected"] or state is None:
         raise RuntimeError("resume progress seed incumbent is invalid")
@@ -965,17 +1536,9 @@ def _restore_selection_history(
     for expected_epoch, record in enumerate(history):
         if not isinstance(record, dict) or record.get("epoch") != expected_epoch:
             raise RuntimeError("resume selection history epochs are not contiguous")
-        missing = record.get("missing_validation_classes")
-        if not isinstance(missing, list) or any(
-            name not in DETECTOR_CLASSES for name in missing
-        ):
-            raise RuntimeError("resume selection history has invalid missing classes")
-        decision, next_state = consider_safety_candidate(
-            state,
-            epoch=expected_epoch,
-            recall_by_class=record.get("per_class_recall"),
-            precision_by_class=record.get("per_class_precision"),
-            missing_classes=missing,
+        runtime_metrics = record.get("runtime_selection_metrics")
+        decision, next_state = consider_runtime_selection_candidate(
+            state, runtime_metrics
         )
         if (
             record.get("selected") is not decision["selected"]
@@ -985,26 +1548,15 @@ def _restore_selection_history(
         ):
             raise RuntimeError("resume selection history has inconsistent selection")
         candidate = decision["candidate"]
-        if (
-            candidate is None
-            or record.get("secret_recall_minimum")
-            != candidate["secret_recall_minimum"]
-            or record.get("other_sensitive_recall_mean")
-            != candidate["other_sensitive_recall_mean"]
-            or record.get("precision_mean") != candidate["precision_mean"]
-        ):
-            raise RuntimeError("resume selection history metric summary was altered")
+        if candidate is None or runtime_metrics != candidate:
+            raise RuntimeError("resume runtime selection metrics were altered")
         if next_state is not None:
             state = next_state
         restored.append(dict(record))
     if state is None:
         raise RuntimeError("resume selection state is missing")
     incumbent = state["incumbent"]
-    running_best = (
-        float(incumbent["secret_recall_minimum"]),
-        float(incumbent["other_sensitive_recall_mean"]),
-        float(incumbent["precision_mean"]),
-    )
+    running_best = runtime_selection_score(incumbent)
     declared_best = progress.get("best_score")
     if declared_best != list(running_best):
         raise RuntimeError("resume selection history best score is inconsistent")
@@ -1017,6 +1569,8 @@ def load_visual_resume_state(
     args: argparse.Namespace,
     contract: dict[str, Any],
     torch_module: Any,
+    *,
+    allow_completed_schedule: bool = False,
 ) -> dict[str, Any]:
     """Validate and load exactly the durable last.pt for an interrupted run."""
 
@@ -1024,13 +1578,24 @@ def load_visual_resume_state(
     progress_path = args.output_dir / SAFETY_PROGRESS_NAME
     progress = _read_json_object(progress_path, "safety selection progress")
     schema_version = progress.get("schema_version")
-    if schema_version != 3:
+    if schema_version != 4:
         raise RuntimeError(
-            "legacy visual progress cannot resume under the stable optimizer and "
-            "constrained safety-selection policy; start a named frozen-seed attempt"
+            "legacy visual progress cannot resume under calibrated runtime "
+            "selection; start a named frozen-seed attempt"
         )
     if progress.get("resume_contract") != contract:
         raise RuntimeError("resume progress data or run contract has changed")
+    persisted_history = progress.get("history")
+    first_record = (
+        persisted_history[0]
+        if isinstance(persisted_history, list) and persisted_history
+        else None
+    )
+    first_canary = (
+        first_record.get("canary_gate") if isinstance(first_record, dict) else None
+    )
+    if isinstance(first_canary, dict) and first_canary.get("passed") is not True:
+        raise RuntimeError("a failed first-epoch visual canary cannot be resumed")
     persisted_seed = _read_json_object(
         args.output_dir / SEED_INCUMBENT_NAME, "frozen seed incumbent"
     )
@@ -1046,16 +1611,101 @@ def load_visual_resume_state(
         raise RuntimeError("frozen seed incumbent does not match the immutable seed")
 
     weights = args.output_dir / ULTRALYTICS_RUN_NAME / "weights"
-    last_path = _validated_progress_checkpoint(
-        progress, "last", weights / "last.pt"
-    )
-    _validated_progress_checkpoint(progress, "best", weights / "best.pt")
+    if progress.get("status") == PRETRAIN_BUDGET_PAUSE_STATUS:
+        if (
+            progress.get("epoch") != -1
+            or progress.get("history") != []
+            or progress.get("resume_allowed") is not True
+        ):
+            raise RuntimeError("pre-training budget pause state is malformed")
+        seed_decision, selection_state = consider_runtime_selection_candidate(
+            None, persisted_seed
+        )
+        if not seed_decision["selected"] or selection_state is None:
+            raise RuntimeError("pre-training budget pause seed state is invalid")
+        incumbent = selection_state["incumbent"]
+        best_key = runtime_selection_score(incumbent)
+        if (
+            progress.get("selection_state") != selection_state
+            or progress.get("best_score") != list(best_key)
+        ):
+            raise RuntimeError("pre-training budget pause selection state changed")
+        _validated_progress_checkpoint(
+            progress, "safety_best", args.output_dir / "safety-best.pt"
+        )
+        _validated_progress_checkpoint(
+            progress,
+            "runtime_profile",
+            args.output_dir / SAFETY_THRESHOLDS_NAME,
+        )
+        return {
+            "last_path": None,
+            "history": [],
+            "best_key": best_key,
+            "selection_state": selection_state,
+            "seed_incumbent": persisted_seed,
+            "progress": progress,
+            "progress_sha256": sha256_file(progress_path),
+            "restart_before_training": True,
+            "training_complete": False,
+        }
+
+    progress_epoch = progress.get("epoch")
+    if type(progress_epoch) is not int or progress_epoch < 0:
+        raise RuntimeError("resume progress epoch is invalid")
+    next_epoch = progress_epoch + 1
+    if next_epoch > args.epochs:
+        raise RuntimeError("resume progress exceeds the configured training schedule")
+
+    # The safety-selected checkpoint is the only model artifact needed to
+    # finish evaluation and write the manifest. Ultralytics final_eval() may
+    # already have stripped or partially rewritten last.pt/best.pt before a
+    # final validation failure, so completed-schedule recovery must not trust
+    # either of those mutable framework checkpoints.
     _validated_progress_checkpoint(
         progress, "safety_best", args.output_dir / "safety-best.pt"
+    )
+    _validated_progress_checkpoint(
+        progress,
+        "runtime_profile",
+        args.output_dir / SAFETY_THRESHOLDS_NAME,
     )
     history, best_key, selection_state, seed_incumbent = (
         _restore_selection_history(progress)
     )
+    persisted_profile = _read_json_object(
+        args.output_dir / SAFETY_THRESHOLDS_NAME,
+        "selected runtime threshold profile",
+    )
+    incumbent = selection_state["incumbent"]
+    if (
+        persisted_profile.get("checkpoint_sha256")
+        != incumbent["checkpoint_sha256"]
+        or persisted_profile.get("threshold_profile")
+        != incumbent["threshold_profile"]
+        or persisted_profile.get("threshold_profile_sha256")
+        != incumbent["threshold_profile_sha256"]
+    ):
+        raise RuntimeError("selected runtime threshold profile differs from history")
+    if next_epoch == args.epochs:
+        if not allow_completed_schedule:
+            raise RuntimeError("the persisted visual training schedule is already complete")
+        return {
+            "last_path": None,
+            "history": history,
+            "best_key": best_key,
+            "selection_state": selection_state,
+            "seed_incumbent": seed_incumbent,
+            "progress": progress,
+            "progress_sha256": sha256_file(progress_path),
+            "restart_before_training": False,
+            "training_complete": True,
+        }
+
+    last_path = _validated_progress_checkpoint(
+        progress, "last", weights / "last.pt"
+    )
+    _validated_progress_checkpoint(progress, "best", weights / "best.pt")
     try:
         checkpoint = torch_module.load(
             str(last_path), map_location="cpu", weights_only=False
@@ -1075,8 +1725,6 @@ def load_visual_resume_state(
         raise RuntimeError("last.pt lacks original Ultralytics training arguments")
     if train_args.get("epochs") != args.epochs:
         raise RuntimeError("resume total epochs differ from the original schedule")
-    if progress["epoch"] + 1 >= args.epochs:
-        raise RuntimeError("the persisted visual training schedule is already complete")
     checkpoint_data = train_args.get("data")
     if (
         not isinstance(checkpoint_data, str)
@@ -1090,10 +1738,14 @@ def load_visual_resume_state(
         or Path(checkpoint_save_dir).resolve() != expected_save_dir.resolve()
     ):
         raise RuntimeError("last.pt output directory differs from the resumed run")
+    # DataLoader worker count is intentionally absent: Ultralytics explicitly
+    # permits it as a resume-time resource override. Batch size and every model
+    # optimization/data contract remain immutable below.
     for key, expected in (
         ("imgsz", args.image_size),
         ("batch", args.batch_size),
         ("seed", args.seed),
+        ("freeze", SAFE_FINE_TUNE_POLICY["trainable_layer"]),
         *STABLE_OPTIMIZER_POLICY.items(),
         *SCREENSHOT_AUGMENTATION_POLICY.items(),
     ):
@@ -1107,6 +1759,8 @@ def load_visual_resume_state(
         "seed_incumbent": seed_incumbent,
         "progress": progress,
         "progress_sha256": sha256_file(progress_path),
+        "restart_before_training": False,
+        "training_complete": False,
     }
 
 
@@ -1114,7 +1768,7 @@ def write_safety_selection_progress(
     output_dir: Path,
     trainer: Any,
     history: list[dict[str, Any]],
-    best_key: tuple[float, float, float] | None,
+    best_key: tuple[float, ...] | None,
     safety_best_path: Path,
     resume_contract: dict[str, Any],
     seed_incumbent: dict[str, Any],
@@ -1123,7 +1777,7 @@ def write_safety_selection_progress(
     """Atomically record every checkpoint needed to survive preemption."""
 
     document = {
-        "schema_version": 3,
+        "schema_version": 4,
         "epoch": int(trainer.epoch),
         "selection_policy": SAFETY_SELECTION_POLICY,
         "best_score": list(best_key) if best_key is not None else None,
@@ -1135,6 +1789,9 @@ def write_safety_selection_progress(
             "last": _checkpoint_record(getattr(trainer, "last", None)),
             "best": _checkpoint_record(getattr(trainer, "best", None)),
             "safety_best": _checkpoint_record(safety_best_path),
+            "runtime_profile": _checkpoint_record(
+                output_dir / SAFETY_THRESHOLDS_NAME
+            ),
         },
     }
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1169,6 +1826,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "dataset_yaml": args.output_dir / "staged-dataset.yaml",
             "source_manifest": args.output_dir / "staged-source-manifest.json",
             "staging_manifest": args.output_dir / "dataset-staging-manifest.json",
+            "runtime_selection_contract": (
+                args.output_dir / "staged-runtime-selection-contract.json"
+            ),
         }
         args.data_staging = {
             f"{name}_{field}": (
@@ -1185,6 +1845,15 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     source_manifest = json.loads(args.source_manifest.read_text(encoding="utf-8"))
     if not isinstance(source_manifest, dict):
         raise RuntimeError("detector source manifest must be a JSON object")
+    if resume_requested and source_manifest.get("training_replay") is not None:
+        replay_persisted = {
+            "replay_manifest": args.output_dir / "staged-replay-manifest.json",
+            "replay_train_list": args.output_dir / "staged-replay-train-list.txt",
+        }
+        for name, path in replay_persisted.items():
+            if f"{name}_path" not in args.data_staging:
+                args.data_staging[f"{name}_path"] = str(path)
+                args.data_staging[f"{name}_sha256"] = sha256_file(path)
     dataset = yaml.safe_load(args.dataset_yaml.read_text(encoding="utf-8"))
     if not isinstance(dataset, dict):
         raise RuntimeError("training YAML must contain a dataset mapping")
@@ -1193,11 +1862,37 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    invocation_state_path = args.output_dir / INVOCATION_STATE_NAME
+    if resume_requested and invocation_state_path.exists():
+        invocation_state = _read_json_object(
+            invocation_state_path, "visual training invocation state"
+        )
+        if invocation_state.get("status") == "canary-failed":
+            raise RuntimeError("a failed visual canary cannot be resumed")
     resume_contract = build_training_resume_contract(args, expected_names)
     resume_state = (
-        load_visual_resume_state(args, resume_contract, torch)
+        load_visual_resume_state(
+            args,
+            resume_contract,
+            torch,
+            allow_completed_schedule=True,
+        )
         if resume_requested
         else None
+    )
+    finalize_only_recovery = bool(
+        resume_state is not None and resume_state.get("training_complete") is True
+    )
+    restart_before_training = bool(
+        resume_state is not None
+        and resume_state.get("restart_before_training") is True
+    )
+    if finalize_only_recovery and (args.output_dir / "training_manifest.json").exists():
+        raise RuntimeError("completed visual training already has a training manifest")
+    framework_resume_requested = bool(
+        resume_requested
+        and not finalize_only_recovery
+        and not restart_before_training
     )
     supplemental_test_yaml = prepare_supplemental_test_yaml(
         source_manifest,
@@ -1206,48 +1901,43 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         expected_names,
     )
     best_path = args.output_dir / "safety-best.pt"
+    runtime_selection_evaluator = getattr(
+        args, "runtime_selection_evaluator", None
+    )
+    if not finalize_only_recovery and runtime_selection_evaluator is None:
+        from training.visual.runtime_selection_evaluator import (
+            CalibratedRuntimeSelectionEvaluator,
+        )
+
+        runtime_selection_evaluator = CalibratedRuntimeSelectionEvaluator(
+            Path(args.runtime_selection_contract),
+            device=str(args.device),
+            batch=max(1, min(int(args.batch_size), 32)),
+            workers=int(args.workers),
+            output_dir=args.output_dir / "runtime-selection-evaluation",
+        )
+    evaluated_seed = (
+        runtime_selection_evaluator.initialize_seed(args.base_checkpoint)
+        if runtime_selection_evaluator is not None
+        else None
+    )
     if resume_state is not None:
         history: list[dict[str, Any]] = list(resume_state["history"])
-        best_key: tuple[float, float, float] = resume_state["best_key"]
+        best_key: tuple[float, ...] = resume_state["best_key"]
         selection_state: dict[str, Any] = resume_state["selection_state"]
         seed_incumbent: dict[str, Any] = resume_state["seed_incumbent"]
+        if evaluated_seed is not None and (
+            validate_runtime_selection_candidate(seed_incumbent)
+            != evaluated_seed
+        ):
+            raise RuntimeError(
+                "recomputed frozen runtime seed differs from persisted selection state"
+            )
     else:
-        seed_validation = YOLO(str(args.base_checkpoint)).val(
-            data=str(args.dataset_yaml),
-            split="val",
-            imgsz=args.image_size,
-            batch=args.batch_size,
-            device=args.device,
-            workers=args.workers,
-            plots=False,
-            verbose=False,
-            project=str(args.output_dir),
-            name="frozen-seed-validation",
-            exist_ok=False,
-        )
-        seed_names = normalize_class_names(
-            getattr(seed_validation, "names", None), "frozen seed validation"
-        )
-        if seed_names != expected_names:
-            raise RuntimeError("frozen seed validation class contract changed")
-        seed_box = getattr(seed_validation, "box", None)
-        if seed_box is None:
-            raise RuntimeError("frozen seed validation returned no class metrics")
-        seed_recalls, seed_precisions, seed_missing = align_class_metrics(
-            seed_box, seed_names
-        )
-        seed_recall_by_class = {
-            seed_names[index]: seed_recalls[index] for index in seed_names
-        }
-        seed_precision_by_class = {
-            seed_names[index]: seed_precisions[index] for index in seed_names
-        }
-        seed_decision, initialized_state = consider_safety_candidate(
-            None,
-            epoch=-1,
-            recall_by_class=seed_recall_by_class,
-            precision_by_class=seed_precision_by_class,
-            missing_classes=seed_missing,
+        if evaluated_seed is None:
+            raise RuntimeError("frozen runtime seed evaluation was not initialized")
+        seed_decision, initialized_state = consider_runtime_selection_candidate(
+            None, evaluated_seed
         )
         if not seed_decision["selected"] or initialized_state is None:
             raise RuntimeError(
@@ -1257,26 +1947,535 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         selection_state = initialized_state
         seed_incumbent = {
             **seed_decision["candidate"],
-            "missing_validation_classes": seed_missing,
             "checkpoint": str(args.base_checkpoint),
             "checkpoint_sha256": sha256_file(args.base_checkpoint),
         }
         incumbent = selection_state["incumbent"]
-        best_key = (
-            incumbent["secret_recall_minimum"],
-            incumbent["other_sensitive_recall_mean"],
-            incumbent["precision_mean"],
-        )
+        best_key = runtime_selection_score(incumbent)
         history = []
         shutil.copy2(args.base_checkpoint, best_path)
         if sha256_file(best_path) != seed_incumbent["checkpoint_sha256"]:
             raise RuntimeError("frozen safety incumbent copy failed verification")
+        write_selected_runtime_profile(args.output_dir, seed_incumbent)
         (args.output_dir / SEED_INCUMBENT_NAME).write_text(
             json.dumps(seed_incumbent, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         if checkpoint_commit_hook is not None:
             checkpoint_commit_hook()
+    deadline = getattr(args, "deadline_monotonic", None)
+    if deadline is not None:
+        if (
+            isinstance(deadline, bool)
+            or not isinstance(deadline, (int, float))
+            or not math.isfinite(float(deadline))
+        ):
+            raise RuntimeError("visual training deadline must be a finite number")
+        deadline = float(deadline)
+    if not finalize_only_recovery and deadline is not None:
+        budget_check_time = time.monotonic()
+        seconds_remaining = deadline - budget_check_time
+        if seconds_remaining <= 0:
+            progress_path = args.output_dir / SAFETY_PROGRESS_NAME
+            if framework_resume_requested:
+                if resume_state is None:
+                    raise RuntimeError("pre-training resume state is missing")
+                progress = resume_state["progress"]
+            else:
+                progress = {
+                    "schema_version": 4,
+                    "status": PRETRAIN_BUDGET_PAUSE_STATUS,
+                    "epoch": -1,
+                    "selection_policy": SAFETY_SELECTION_POLICY,
+                    "best_score": list(best_key),
+                    "seed_incumbent": seed_incumbent,
+                    "selection_state": selection_state,
+                    "history": [],
+                    "resume_contract": resume_contract,
+                    "resume_allowed": True,
+                    "checkpoints": {
+                        "last": _checkpoint_record(
+                            args.output_dir
+                            / ULTRALYTICS_RUN_NAME
+                            / "weights/last.pt"
+                        ),
+                        "best": _checkpoint_record(
+                            args.output_dir
+                            / ULTRALYTICS_RUN_NAME
+                            / "weights/best.pt"
+                        ),
+                        "safety_best": _checkpoint_record(best_path),
+                        "runtime_profile": _checkpoint_record(
+                            args.output_dir / SAFETY_THRESHOLDS_NAME
+                        ),
+                    },
+                }
+                _write_json_object_atomic(progress_path, progress)
+            pause_details = {
+                "epoch": progress.get("epoch"),
+                "resume_allowed": True,
+                "seconds_remaining": seconds_remaining,
+                "deadline_monotonic": deadline,
+                "checked_before_framework_training": True,
+            }
+            pause_manifest = {
+                "schema_version": 1,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": PRETRAIN_BUDGET_PAUSE_STATUS,
+                "reason": "budget-deadline-before-training",
+                "details": pause_details,
+                "resume_allowed": True,
+                "attempt_id": getattr(args, "attempt_id", "default"),
+                "total_epochs": args.epochs,
+                "committed_epochs": len(history),
+                "committed_epochs_this_invocation": 0,
+                "last_checkpoint": progress.get("checkpoints", {}).get("last"),
+                "safety_best_checkpoint": _checkpoint_record(best_path),
+                "progress": {
+                    "path": str(progress_path),
+                    "sha256": sha256_file(progress_path),
+                },
+                "resume_contract": resume_contract,
+            }
+            _write_json_object_atomic(invocation_state_path, pause_manifest)
+            if checkpoint_commit_hook is not None:
+                checkpoint_commit_hook()
+            return pause_manifest
+    from training.visual.safe_finetune import (
+        validate_frozen_state_parity,
+        validate_seed_state_parity,
+        wire_safe_finetune_callbacks,
+    )
+
+    model = None
+    safe_finetune = None
+    reference_model = None
+    pre_step_parity_audit: dict[str, Any] | None = (
+        history[-1].get("seed_state_parity_audit")
+        if finalize_only_recovery and history
+        else None
+    )
+    if not finalize_only_recovery:
+        training_checkpoint = (
+            resume_state["last_path"]
+            if framework_resume_requested and resume_state is not None
+            else args.base_checkpoint
+        )
+        reference_model = YOLO(str(training_checkpoint)).model
+        model = YOLO(str(training_checkpoint))
+        safe_finetune = wire_safe_finetune_callbacks(model)
+
+    def on_pretrain_routine_end(trainer) -> None:
+        nonlocal pre_step_parity_audit
+        if reference_model is None:
+            raise RuntimeError("training reference model is missing")
+        pre_step_parity_audit = validate_seed_state_parity(
+            reference_model, trainer.model
+        )
+        trainer.seed_state_parity_audit = pre_step_parity_audit
+
+    if model is not None:
+        model.add_callback("on_pretrain_routine_end", on_pretrain_routine_end)
+    checkpoint_commit_count = len(history)
+    invocation_commit_count = 0
+    epoch_durations: list[float] = []
+    previous_epoch_commit = time.monotonic()
+
+    def on_model_save(trainer) -> None:
+        nonlocal best_key, selection_state
+        nonlocal checkpoint_commit_count, invocation_commit_count
+        nonlocal previous_epoch_commit
+        if safe_finetune is None:
+            raise RuntimeError("safe fine-tune controller is missing")
+        if runtime_selection_evaluator is None:
+            raise RuntimeError("calibrated runtime selector is missing")
+        metrics = getattr(getattr(trainer, "validator", None), "metrics", None)
+        box = getattr(metrics, "box", None)
+        raw_names = getattr(getattr(trainer, "model", None), "names", None)
+        if box is None or raw_names is None:
+            if checkpoint_commit_hook is not None:
+                raise RuntimeError(
+                    "cannot durably commit an epoch without complete selection metrics"
+                )
+            return
+        names = normalize_class_names(raw_names, "Ultralytics training model")
+        if names != expected_names:
+            raise RuntimeError(
+                "Ultralytics training classes differ from the composed detector contract"
+            )
+        recalls, precisions, missing_validation_classes = align_class_metrics(
+            box, names
+        )
+        recall_by_class = {names[index]: recalls[index] for index in names}
+        precision_by_class = {names[index]: precisions[index] for index in names}
+        raw_aggregate = getattr(trainer, "metrics", None)
+        if not isinstance(raw_aggregate, dict):
+            raw_aggregate = getattr(metrics, "results_dict", None)
+        if not isinstance(raw_aggregate, dict):
+            raise RuntimeError("training validation returned no aggregate metrics")
+        aggregate_metrics: dict[str, float] = {}
+        for key, value in raw_aggregate.items():
+            try:
+                aggregate_metrics[str(key)] = _finite_float(
+                    value, f"training validation metric {key}"
+                )
+            except RuntimeError:
+                # Reject a missing/non-finite mAP below, but do not let a
+                # framework-added non-scalar diagnostic poison the report.
+                continue
+        map50 = _finite_float(
+            aggregate_metrics.get("metrics/mAP50(B)"),
+            "training validation mAP50",
+        )
+        checkpoint = Path(str(getattr(trainer, "last", "")))
+        if checkpoint.is_symlink() or not checkpoint.is_file():
+            raise RuntimeError("current epoch checkpoint is missing or unsafe")
+        if reference_model is None:
+            raise RuntimeError("training reference model is missing")
+        current_safe_audit = getattr(
+            trainer, "safe_finetune_audit", safe_finetune.last_report
+        )
+        trainable_parameter_names = (
+            current_safe_audit.get("trainable_parameters")
+            if isinstance(current_safe_audit, dict)
+            else None
+        )
+        if not isinstance(trainable_parameter_names, list) or not all(
+            isinstance(name, str) and name for name in trainable_parameter_names
+        ):
+            raise RuntimeError("safe fine-tune audit has no exact trainable parameters")
+        checkpoint_precision_audit = persist_projected_fp32_ema_checkpoint(
+            reference_model,
+            trainer,
+            checkpoint,
+            trainable_parameter_names=tuple(trainable_parameter_names),
+            protected_class_rows=PROTECTED_CLASSIFIER_ROWS,
+            torch_module=torch,
+        )
+        checkpoint_sha256 = sha256_file(checkpoint)
+        if checkpoint_precision_audit.get("checkpoint_sha256") != checkpoint_sha256:
+            raise RuntimeError("projected FP32 checkpoint hash changed")
+        frozen_state_parity_audit = validate_frozen_state_parity(
+            reference_model,
+            YOLO(str(checkpoint)).model,
+            trainable_parameter_names=tuple(trainable_parameter_names),
+        )
+        runtime_selection_metrics = runtime_selection_evaluator.evaluate_candidate(
+            checkpoint, epoch=int(trainer.epoch)
+        )
+        if (
+            runtime_selection_metrics.get("checkpoint_sha256")
+            != checkpoint_sha256
+        ):
+            raise RuntimeError("runtime audit checkpoint hash changed")
+        decision, candidate_state = consider_runtime_selection_candidate(
+            selection_state, runtime_selection_metrics
+        )
+        require_valid_safety_decision(decision)
+        candidate = decision["candidate"]
+        record = {
+            "epoch": int(trainer.epoch),
+            "metric_basis": RUNTIME_SELECTION_POLICY_NAME,
+            "runtime_selection_metrics": candidate,
+            # Ultralytics chooses one moving global max-F1 threshold. Preserve
+            # those values for diagnosis only; they cannot select a checkpoint.
+            "framework_global_f1_diagnostic": {
+                "per_class_recall": recall_by_class,
+                "per_class_precision": precision_by_class,
+                "map50": map50,
+                "aggregate_metrics": aggregate_metrics,
+            },
+            "missing_validation_classes": missing_validation_classes,
+            "selected": decision["selected"],
+            "selection_reason": decision["reason"],
+            "selection_deltas": decision["deltas"],
+            "selection_gates": decision["gates"],
+            "seed_state_parity_audit": pre_step_parity_audit,
+            "safe_finetune_audit": current_safe_audit,
+            "checkpoint_precision_audit": checkpoint_precision_audit,
+            "frozen_state_parity_audit": frozen_state_parity_audit,
+        }
+        if (
+            pre_step_parity_audit is None
+            or pre_step_parity_audit.get("passed") is not True
+        ):
+            raise RuntimeError("pre-step immutable checkpoint parity was not proven")
+        safe_audit = record["safe_finetune_audit"]
+        if not isinstance(safe_audit, dict) or safe_audit.get("passed") is not True:
+            raise RuntimeError("safe fine-tune controls were not proven during training")
+        if frozen_state_parity_audit.get("passed") is not True:
+            raise RuntimeError("class-output-only frozen-state parity was not proven")
+        if checkpoint_precision_audit.get("passed") is not True:
+            raise RuntimeError("projected FP32 checkpoint parity was not proven")
+        enforce_canary = bool(getattr(args, "enforce_canary", True))
+        if (
+            int(trainer.epoch) == 0
+            and not framework_resume_requested
+            and enforce_canary
+        ):
+            canary = evaluate_first_epoch_canary(seed_incumbent, record)
+            canary["gates"]["immutable_seed_pre_step_parity"] = True
+            canary["gates"]["head_only_frozen_batchnorm"] = True
+            canary["gates"]["class_output_only_frozen_state_parity"] = True
+            canary["gates"]["projected_fp32_checkpoint_parity"] = True
+            canary["gates"]["protected_classifier_row_parity"] = not bool(
+                checkpoint_precision_audit.get("protected_row_mismatches")
+            )
+            gradient_mask_audit = safe_audit.get(
+                "protected_gradient_mask_audit"
+            )
+            canary["gates"]["protected_classifier_gradient_mask"] = bool(
+                isinstance(gradient_mask_audit, dict)
+                and gradient_mask_audit.get("passed") is True
+                and gradient_mask_audit.get("protected_classes")
+                == list(PROTECTED_CLASSIFIER_CLASSES)
+            )
+            canary["gates"]["approved_classifier_change_observed"] = bool(
+                frozen_state_parity_audit.get("trainable_change_observed")
+            )
+            canary["passed"] = all(canary["gates"].values())
+            record["canary_gate"] = canary
+            if canary["passed"] is not True:
+                # The canary independently recomputes every operational guard.
+                # Never let a failed epoch replace the immutable safety seed.
+                record["selected"] = False
+                record["selection_reason"] = "rejected-first-epoch-canary"
+                candidate_state = selection_state
+                sentinel = {
+                    "schema_version": 1,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "status": "canary-failed",
+                    "epoch": int(trainer.epoch),
+                    "resume_allowed": False,
+                    "canary_gate": canary,
+                }
+                sentinel_temporary = invocation_state_path.with_name(
+                    f".{invocation_state_path.name}.partial-{os.getpid()}"
+                )
+                sentinel_temporary.write_text(
+                    json.dumps(sentinel, indent=2, sort_keys=True, default=float)
+                    + "\n",
+                    encoding="utf-8",
+                )
+                sentinel_temporary.replace(invocation_state_path)
+        else:
+            record["canary_gate"] = None
+        history.append(record)
+        if record["selected"]:
+            if candidate_state is None:
+                raise RuntimeError("selected checkpoint produced no safety state")
+            selection_state = candidate_state
+            incumbent = selection_state["incumbent"]
+            best_key = runtime_selection_score(incumbent)
+            shutil.copy2(checkpoint, best_path)
+            if sha256_file(best_path) != checkpoint_sha256:
+                raise RuntimeError("selected runtime checkpoint copy failed verification")
+            write_selected_runtime_profile(args.output_dir, incumbent)
+        progress_path, progress = write_safety_selection_progress(
+            args.output_dir,
+            trainer,
+            history,
+            best_key,
+            best_path,
+            resume_contract,
+            seed_incumbent,
+            selection_state,
+        )
+        if checkpoint_commit_hook is not None:
+            missing = [
+                name
+                for name, checkpoint in progress["checkpoints"].items()
+                if checkpoint.get("exists") is not True
+            ]
+            if missing:
+                raise RuntimeError(
+                    "cannot commit incomplete epoch checkpoints: " + ", ".join(missing)
+                )
+            output_root = args.output_dir.resolve()
+            outside_output = [
+                name
+                for name, checkpoint in progress["checkpoints"].items()
+                if output_root not in Path(checkpoint["path"]).resolve().parents
+            ]
+            if outside_output:
+                raise RuntimeError(
+                    "cannot commit checkpoints outside the durable output root: "
+                    + ", ".join(outside_output)
+                )
+            if not progress_path.is_file():
+                raise RuntimeError("safety selection progress was not persisted")
+            checkpoint_commit_hook()
+            checkpoint_commit_count += 1
+            invocation_commit_count += 1
+
+        now = time.monotonic()
+        epoch_durations.append(now - previous_epoch_commit)
+        previous_epoch_commit = now
+        canary_gate = record.get("canary_gate")
+        if isinstance(canary_gate, dict) and canary_gate.get("passed") is not True:
+            raise PlannedTrainingPause(
+                "canary-failed",
+                {
+                    "epoch": int(trainer.epoch),
+                    "canary_gate": canary_gate,
+                    "resume_allowed": False,
+                },
+            )
+        deadline = getattr(args, "deadline_monotonic", None)
+        if (
+            isinstance(deadline, (int, float))
+            and int(trainer.epoch) + 1 < args.epochs
+        ):
+            estimate = 1.25 * statistics.median(epoch_durations[-3:])
+            finalization_reserve = 15 * 60
+            remaining = float(deadline) - now
+            if remaining < estimate + finalization_reserve:
+                raise PlannedTrainingPause(
+                    "budget-deadline",
+                    {
+                        "epoch": int(trainer.epoch),
+                        "resume_allowed": True,
+                        "seconds_remaining": remaining,
+                        "estimated_next_epoch_seconds": estimate,
+                        "finalization_reserve_seconds": finalization_reserve,
+                    },
+                )
+
+    result = None
+    if not finalize_only_recovery:
+        if model is None or safe_finetune is None:
+            raise RuntimeError("visual training model controls are missing")
+        model.add_callback("on_model_save", on_model_save)
+        try:
+            result = model.train(
+                data=str(args.dataset_yaml),
+                epochs=args.epochs,
+                imgsz=args.image_size,
+                batch=args.batch_size,
+                device=args.device,
+                seed=args.seed,
+                deterministic=True,
+                project=str(args.output_dir),
+                name=ULTRALYTICS_RUN_NAME,
+                exist_ok=False,
+                workers=args.workers,
+                patience=args.patience,
+                save=True,
+                save_period=1,
+                resume=framework_resume_requested,
+                plots=False,
+                verbose=True,
+                **safe_finetune.training_overrides(),
+                **STABLE_OPTIMIZER_POLICY,
+                **SCREENSHOT_AUGMENTATION_POLICY,
+            )
+        except PlannedTrainingPause as pause:
+            last_path = args.output_dir / ULTRALYTICS_RUN_NAME / "weights/last.pt"
+            progress_path = args.output_dir / SAFETY_PROGRESS_NAME
+            if last_path.is_symlink() or not last_path.is_file():
+                raise RuntimeError("planned pause has no durable last.pt") from pause
+            checkpoint = torch.load(
+                str(last_path), map_location="cpu", weights_only=False
+            )
+            if (
+                not isinstance(checkpoint, dict)
+                or checkpoint.get("epoch") != pause.details.get("epoch")
+                or checkpoint.get("optimizer") is None
+                or checkpoint.get("scaler") is None
+                or checkpoint.get("ema") is None
+            ):
+                raise RuntimeError(
+                    "planned pause checkpoint is not safely resumable"
+                ) from pause
+            progress = _read_json_object(
+                progress_path, "planned pause safety progress"
+            )
+            progress_last = progress.get("checkpoints", {}).get("last", {})
+            if progress_last.get("sha256") != sha256_file(last_path):
+                raise RuntimeError(
+                    "planned pause checkpoint differs from committed progress"
+                ) from pause
+            status = (
+                "canary-failed"
+                if pause.reason == "canary-failed"
+                else "budget-paused"
+            )
+            pause_manifest = {
+                "schema_version": 1,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": status,
+                "reason": pause.reason,
+                "details": pause.details,
+                "resume_allowed": pause.details.get("resume_allowed") is True,
+                "attempt_id": getattr(args, "attempt_id", "default"),
+                "total_epochs": args.epochs,
+                "committed_epochs": len(history),
+                "committed_epochs_this_invocation": invocation_commit_count,
+                "last_checkpoint": _checkpoint_record(last_path),
+                "safety_best_checkpoint": _checkpoint_record(best_path),
+                "progress": {
+                    "path": str(progress_path),
+                    "sha256": sha256_file(progress_path),
+                },
+                "resume_contract": resume_contract,
+            }
+            _write_json_object_atomic(invocation_state_path, pause_manifest)
+            if checkpoint_commit_hook is not None:
+                checkpoint_commit_hook()
+            return pause_manifest
+    # Ultralytics finalization strips optimizer state from last.pt/best.pt
+    # after the final on_model_save callback. Refresh their hashes so durable
+    # progress remains truthful, while explicitly marking the finished
+    # schedule non-resumable.
+    completed_progress_path = args.output_dir / SAFETY_PROGRESS_NAME
+    completed_progress = _read_json_object(
+        completed_progress_path, "completed safety selection progress"
+    )
+    completed_progress["checkpoints"] = {
+        "last": _checkpoint_record(
+            args.output_dir / ULTRALYTICS_RUN_NAME / "weights/last.pt"
+        ),
+        "best": _checkpoint_record(
+            args.output_dir / ULTRALYTICS_RUN_NAME / "weights/best.pt"
+        ),
+        "safety_best": _checkpoint_record(best_path),
+        "runtime_profile": _checkpoint_record(
+            args.output_dir / SAFETY_THRESHOLDS_NAME
+        ),
+    }
+    completed_progress["training_completed"] = True
+    completed_progress["resume_allowed"] = False
+    completed_progress_temporary = completed_progress_path.with_name(
+        f".{completed_progress_path.name}.partial-{os.getpid()}"
+    )
+    completed_progress_temporary.write_text(
+        json.dumps(completed_progress, indent=2, sort_keys=True, default=float)
+        + "\n",
+        encoding="utf-8",
+    )
+    completed_progress_temporary.replace(completed_progress_path)
+    if not best_path.exists():
+        raise RuntimeError("training completed without a safety-selected checkpoint")
+    selected_validation = YOLO(str(best_path)).val(
+        data=str(args.dataset_yaml),
+        split="val",
+        imgsz=args.image_size,
+        batch=args.batch_size,
+        device=args.device,
+        workers=args.workers,
+        plots=False,
+        verbose=False,
+        project=str(args.output_dir),
+        name="safety-best-validation",
+        exist_ok=resume_requested,
+    )
+    selected_evaluation = evaluation_report(
+        selected_validation,
+        expected_names,
+        "missing_validation_classes",
+    )
+    # The published WebPII and supplemental ATS tests are release gates only.
+    # Freeze checkpoint selection completely before running either seed baseline.
     baseline_published_test = YOLO(str(args.base_checkpoint)).val(
         data=str(args.dataset_yaml),
         split="test",
@@ -1315,157 +2514,6 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             expected_names,
             "missing_test_classes",
         )
-    model = YOLO(
-        str(resume_state["last_path"] if resume_state else args.base_checkpoint)
-    )
-    checkpoint_commit_count = len(history)
-    invocation_commit_count = 0
-
-    def on_model_save(trainer) -> None:
-        nonlocal best_key, selection_state
-        nonlocal checkpoint_commit_count, invocation_commit_count
-        metrics = getattr(getattr(trainer, "validator", None), "metrics", None)
-        box = getattr(metrics, "box", None)
-        raw_names = getattr(getattr(trainer, "model", None), "names", None)
-        if box is None or raw_names is None:
-            if checkpoint_commit_hook is not None:
-                raise RuntimeError(
-                    "cannot durably commit an epoch without complete selection metrics"
-                )
-            return
-        names = normalize_class_names(raw_names, "Ultralytics training model")
-        if names != expected_names:
-            raise RuntimeError(
-                "Ultralytics training classes differ from the composed detector contract"
-            )
-        recalls, precisions, missing_validation_classes = align_class_metrics(
-            box, names
-        )
-        recall_by_class = {names[index]: recalls[index] for index in names}
-        precision_by_class = {names[index]: precisions[index] for index in names}
-        decision, candidate_state = consider_safety_candidate(
-            selection_state,
-            epoch=int(trainer.epoch),
-            recall_by_class=recall_by_class,
-            precision_by_class=precision_by_class,
-            missing_classes=missing_validation_classes,
-        )
-        require_valid_safety_decision(decision)
-        candidate = decision["candidate"]
-        record = {
-            "epoch": int(trainer.epoch),
-            "secret_recall_minimum": (
-                candidate["secret_recall_minimum"] if candidate else None
-            ),
-            "other_sensitive_recall_mean": (
-                candidate["other_sensitive_recall_mean"] if candidate else None
-            ),
-            # Backward-readable alias; selection no longer uses lexicographic order.
-            "non_secret_recall_mean": (
-                candidate["other_sensitive_recall_mean"] if candidate else None
-            ),
-            "precision_mean": candidate["precision_mean"] if candidate else None,
-            "per_class_recall": recall_by_class,
-            "per_class_precision": precision_by_class,
-            "missing_validation_classes": missing_validation_classes,
-            "selected": decision["selected"],
-            "selection_reason": decision["reason"],
-            "selection_deltas": decision["deltas"],
-            "selection_gates": decision["gates"],
-        }
-        history.append(record)
-        if record["selected"]:
-            if candidate_state is None:
-                raise RuntimeError("selected checkpoint produced no safety state")
-            selection_state = candidate_state
-            incumbent = selection_state["incumbent"]
-            best_key = (
-                incumbent["secret_recall_minimum"],
-                incumbent["other_sensitive_recall_mean"],
-                incumbent["precision_mean"],
-            )
-            checkpoint = Path(trainer.last)
-            if checkpoint.exists():
-                shutil.copy2(checkpoint, best_path)
-        progress_path, progress = write_safety_selection_progress(
-            args.output_dir,
-            trainer,
-            history,
-            best_key,
-            best_path,
-            resume_contract,
-            seed_incumbent,
-            selection_state,
-        )
-        if checkpoint_commit_hook is not None:
-            missing = [
-                name
-                for name, checkpoint in progress["checkpoints"].items()
-                if checkpoint.get("exists") is not True
-            ]
-            if missing:
-                raise RuntimeError(
-                    "cannot commit incomplete epoch checkpoints: " + ", ".join(missing)
-                )
-            output_root = args.output_dir.resolve()
-            outside_output = [
-                name
-                for name, checkpoint in progress["checkpoints"].items()
-                if output_root not in Path(checkpoint["path"]).resolve().parents
-            ]
-            if outside_output:
-                raise RuntimeError(
-                    "cannot commit checkpoints outside the durable output root: "
-                    + ", ".join(outside_output)
-                )
-            if not progress_path.is_file():
-                raise RuntimeError("safety selection progress was not persisted")
-            checkpoint_commit_hook()
-            checkpoint_commit_count += 1
-            invocation_commit_count += 1
-
-    model.add_callback("on_model_save", on_model_save)
-    result = model.train(
-        data=str(args.dataset_yaml),
-        epochs=args.epochs,
-        imgsz=args.image_size,
-        batch=args.batch_size,
-        device=args.device,
-        seed=args.seed,
-        deterministic=True,
-        project=str(args.output_dir),
-        name=ULTRALYTICS_RUN_NAME,
-        exist_ok=False,
-        workers=args.workers,
-        patience=args.patience,
-        save=True,
-        save_period=1,
-        resume=resume_requested,
-        plots=False,
-        verbose=True,
-        **STABLE_OPTIMIZER_POLICY,
-        **SCREENSHOT_AUGMENTATION_POLICY,
-    )
-    if not best_path.exists():
-        raise RuntimeError("training completed without a safety-selected checkpoint")
-    selected_validation = YOLO(str(best_path)).val(
-        data=str(args.dataset_yaml),
-        split="val",
-        imgsz=args.image_size,
-        batch=args.batch_size,
-        device=args.device,
-        workers=args.workers,
-        plots=False,
-        verbose=False,
-        project=str(args.output_dir),
-        name="safety-best-validation",
-        exist_ok=False,
-    )
-    selected_evaluation = evaluation_report(
-        selected_validation,
-        expected_names,
-        "missing_validation_classes",
-    )
     published_test = YOLO(str(best_path)).val(
         data=str(args.dataset_yaml),
         split="test",
@@ -1477,7 +2525,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         verbose=False,
         project=str(args.output_dir),
         name="safety-best-webpii-test",
-        exist_ok=False,
+        exist_ok=resume_requested,
     )
     published_test_evaluation = evaluation_report(
         published_test,
@@ -1497,15 +2545,65 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             verbose=False,
             project=str(args.output_dir),
             name="safety-best-supplemental-test",
-            exist_ok=False,
+            exist_ok=resume_requested,
         )
         supplemental_test_evaluation = evaluation_report(
             supplemental_test,
             expected_names,
             "missing_test_classes",
         )
+    from training.visual.diagnose_detector_curves import HIGH_RECALL_THRESHOLDS
+    from training.visual.diagnose_detector_runtime import (
+        evaluate_checkpoint as evaluate_runtime_checkpoint,
+    )
+    from training.visual.diagnose_detector_runtime import resolve_dataset_images
+
+    runtime_batch = max(1, min(int(args.batch_size), 32))
+    published_test_images = resolve_dataset_images(args.dataset_yaml, "test")
+    baseline_published_runtime, _ = evaluate_runtime_checkpoint(
+        args.base_checkpoint,
+        published_test_images,
+        device=str(args.device),
+        batch=runtime_batch,
+        threshold_profiles={"high-recall": dict(HIGH_RECALL_THRESHOLDS)},
+    )
+    selected_profile = selection_state["incumbent"]["threshold_profile"]
+    selected_published_runtime, _ = evaluate_runtime_checkpoint(
+        best_path,
+        published_test_images,
+        device=str(args.device),
+        batch=runtime_batch,
+        threshold_profiles={"high-recall": selected_profile},
+    )
+    published_runtime_release_gate = evaluate_runtime_release_gate(
+        baseline_published_runtime, selected_published_runtime
+    )
+    baseline_supplemental_runtime = None
+    selected_supplemental_runtime = None
+    supplemental_runtime_release_gate = None
+    if supplemental_test_yaml is not None:
+        supplemental_test_images = resolve_dataset_images(
+            supplemental_test_yaml, "test"
+        )
+        baseline_supplemental_runtime, _ = evaluate_runtime_checkpoint(
+            args.base_checkpoint,
+            supplemental_test_images,
+            device=str(args.device),
+            batch=runtime_batch,
+            threshold_profiles={"high-recall": dict(HIGH_RECALL_THRESHOLDS)},
+        )
+        selected_supplemental_runtime, _ = evaluate_runtime_checkpoint(
+            best_path,
+            supplemental_test_images,
+            device=str(args.device),
+            batch=runtime_batch,
+            threshold_profiles={"high-recall": selected_profile},
+        )
+        supplemental_runtime_release_gate = evaluate_runtime_release_gate(
+            baseline_supplemental_runtime, selected_supplemental_runtime
+        )
     manifest = {
-        "schema_version": 3,
+        "schema_version": 4,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "trained-unpublished",
         "selection_policy": SAFETY_SELECTION_POLICY,
@@ -1523,6 +2621,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "source_manifest": str(args.source_manifest),
             "source_manifest_sha256": sha256_file(args.source_manifest),
             "staging": getattr(args, "data_staging", None),
+            "replay_contract": resume_contract.get("replay_contract"),
+            "runtime_selection_contract": resume_contract.get(
+                "runtime_selection_contract"
+            ),
         },
         "training_attempt": {
             "attempt_id": getattr(args, "attempt_id", "default"),
@@ -1531,11 +2633,22 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 args, "attempt_manifest_sha256", None
             ),
             "new_non_resume_seed": not resume_requested,
+            "finalize_only_recovery": finalize_only_recovery,
+            "restart_after_pretraining_budget_pause": restart_before_training,
         },
         "best_checkpoint": {
             "path": best_path.name,
             "sha256": sha256_file(best_path),
             "score": best_key,
+            "threshold_profile": {
+                "path": SAFETY_THRESHOLDS_NAME,
+                "sha256": sha256_file(
+                    args.output_dir / SAFETY_THRESHOLDS_NAME
+                ),
+                "profile_sha256": selection_state["incumbent"][
+                    "threshold_profile_sha256"
+                ],
+            },
         },
         "history": history,
         "environment": {
@@ -1560,14 +2673,29 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "patience": args.patience,
             "seed": args.seed,
             "resume_requested": resume_requested,
+            "framework_resume_requested": framework_resume_requested,
+            "finalize_only_recovery": finalize_only_recovery,
             "save": True,
             "save_period": 1,
             "optimizer_policy": {
-                "name": "stable-adamw-v1",
+                "name": STABLE_OPTIMIZER_POLICY_NAME,
                 "ultralytics_overrides": dict(STABLE_OPTIMIZER_POLICY),
                 "sha256": _canonical_json_sha256(STABLE_OPTIMIZER_POLICY),
                 "auto_optimizer_disabled": True,
             },
+            "safe_fine_tune_policy": {
+                **SAFE_FINE_TUNE_POLICY,
+                "sha256": _canonical_json_sha256(SAFE_FINE_TUNE_POLICY),
+                "pre_step_parity_audit": pre_step_parity_audit,
+                "callback_event_counts": (
+                    safe_finetune.event_counts
+                    if safe_finetune is not None
+                    else None
+                ),
+            },
+            "budget_deadline_monotonic_set": isinstance(
+                getattr(args, "deadline_monotonic", None), (int, float)
+            ),
             "monitoring_policy": dict(MONITORING_POLICY),
             "augmentation_policy": {
                 "name": "screen-native-conservative-v1",
@@ -1611,7 +2739,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "resume_progress_sha256": (
                 resume_state["progress_sha256"] if resume_state else None
             ),
-            "progress_schema_version": 3,
+            "progress_schema_version": 4,
             "seed_incumbent_path": SEED_INCUMBENT_NAME,
             "seed_incumbent_sha256": sha256_file(
                 args.output_dir / SEED_INCUMBENT_NAME
@@ -1622,7 +2750,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "dataset": PUBLISHED_TEST_SOURCE,
             "source": PUBLISHED_TEST_SOURCE,
             "split": "test",
-            "timing": "pre-training",
+            "timing": "post-selection-release-baseline",
             "checkpoint": str(args.base_checkpoint),
             "checkpoint_status": "frozen",
             "used_for_checkpoint_selection": False,
@@ -1634,7 +2762,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                     "dataset": "supplemental_ats/test",
                     "source": "user-provided ATS synthetic/test",
                     "split": "test",
-                    "timing": "pre-training",
+                    "timing": "post-selection-release-baseline",
                     "checkpoint": str(args.base_checkpoint),
                     "checkpoint_status": "frozen",
                     "used_for_checkpoint_selection": False,
@@ -1653,9 +2781,15 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "dataset": "PLVA synthetic/validation",
             "source": SYNTHETIC_VALIDATION_SOURCE,
             "split": "val",
-            "timing": "checkpoint-selection",
-            "used_for_checkpoint_selection": True,
+            "timing": "post-selection-framework-diagnostic",
+            "used_for_checkpoint_selection": False,
             **selected_evaluation,
+        },
+        "runtime_checkpoint_selection_evaluation": {
+            "metric_basis": RUNTIME_SELECTION_POLICY_NAME,
+            "used_for_checkpoint_selection": True,
+            "published_webpii_test_used": False,
+            "selected": selection_state["incumbent"],
         },
         "published_test_evaluation": {
             "dataset": PUBLISHED_TEST_SOURCE,
@@ -1665,6 +2799,14 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "checkpoint": best_path.name,
             "used_for_checkpoint_selection": False,
             **published_test_evaluation,
+        },
+        "published_test_runtime_evaluation": {
+            "metric_basis": RUNTIME_SELECTION_POLICY_NAME,
+            "used_for_checkpoint_selection": False,
+            "timing": "post-selection-release-gate",
+            "baseline": baseline_published_runtime,
+            "selected": selected_published_runtime,
+            "release_gate": published_runtime_release_gate,
         },
         **(
             {
@@ -1686,6 +2828,21 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             and supplemental_test_yaml is not None
             else {}
         ),
+        **(
+            {
+                "supplemental_test_runtime_evaluation": {
+                    "metric_basis": RUNTIME_SELECTION_POLICY_NAME,
+                    "used_for_checkpoint_selection": False,
+                    "timing": "post-selection-release-gate",
+                    "baseline": baseline_supplemental_runtime,
+                    "selected": selected_supplemental_runtime,
+                    "release_gate": supplemental_runtime_release_gate,
+                }
+            }
+            if baseline_supplemental_runtime is not None
+            and selected_supplemental_runtime is not None
+            else {}
+        ),
         "ultralytics_default_best_results": getattr(result, "results_dict", {}),
         "distribution": {
             "mode": "agpl-development" if agpl_mode else "commercial-license",
@@ -1702,6 +2859,17 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                 else []
             ),
             "WebPII and base-checkpoint license obligations require review",
+            *(
+                ["published WebPII runtime privacy release gate failed"]
+                if published_runtime_release_gate["passed"] is not True
+                else []
+            ),
+            *(
+                ["supplemental ATS runtime privacy release gate failed"]
+                if isinstance(supplemental_runtime_release_gate, dict)
+                and supplemental_runtime_release_gate.get("passed") is not True
+                else []
+            ),
         ],
     }
     # Ultralytics may expose NumPy or Torch scalar subclasses in results_dict.
@@ -1713,6 +2881,28 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         serialized + "\n",
         encoding="utf-8",
     )
+    completion_state = {
+        "schema_version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "completed",
+        "resume_allowed": False,
+        "finalize_only_recovery": finalize_only_recovery,
+        "attempt_id": getattr(args, "attempt_id", "default"),
+        "total_epochs": args.epochs,
+        "committed_epochs": len(history),
+        "training_manifest_sha256": sha256_file(
+            args.output_dir / "training_manifest.json"
+        ),
+        "safety_best_checkpoint": _checkpoint_record(best_path),
+    }
+    temporary_state = invocation_state_path.with_name(
+        f".{invocation_state_path.name}.partial-{os.getpid()}"
+    )
+    temporary_state.write_text(
+        json.dumps(completion_state, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary_state.replace(invocation_state_path)
     return manifest_document
 
 

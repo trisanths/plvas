@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -8,6 +10,15 @@ import {
   decodeDetections,
   nonMaximumSuppression,
 } from "../src/visual/postprocess.js";
+import {
+  VISUAL_ARTIFACT_CONTRACT,
+  VISUAL_RUNTIME_POLICY,
+} from "../src/visual/model-contract.js";
+
+const artifactRoot = new URL(
+  "../training/artifacts/plva-visual-agpl-ats-v3/visual-safe-head-v10/",
+  import.meta.url,
+);
 
 test("letterboxes a wide screenshot without stretching it", () => {
   assert.deepEqual(computeLetterboxTransform(1600, 280), {
@@ -20,6 +31,32 @@ test("letterboxes a wide screenshot without stretching it", () => {
     padLeft: 0,
     padTop: 264,
   });
+});
+
+test("binds the v3 detector, selected checkpoint, and calibrated thresholds", async () => {
+  const [model, thresholdBytes] = await Promise.all([
+    readFile(new URL("detector.onnx", artifactRoot)),
+    readFile(new URL("safety-best-thresholds.json", artifactRoot)),
+  ]);
+  const thresholds = JSON.parse(thresholdBytes.toString("utf8"));
+  assert.equal(sha256(model), VISUAL_ARTIFACT_CONTRACT.modelSha256);
+  assert.equal(
+    sha256(thresholdBytes),
+    VISUAL_ARTIFACT_CONTRACT.thresholdArtifactSha256,
+  );
+  assert.equal(
+    thresholds.checkpoint_sha256,
+    VISUAL_ARTIFACT_CONTRACT.checkpointSha256,
+  );
+  assert.equal(
+    thresholds.threshold_profile_sha256,
+    VISUAL_ARTIFACT_CONTRACT.thresholdProfileSha256,
+  );
+  assert.deepEqual(thresholds.threshold_profile, THRESHOLD_PROFILES["high-recall"]);
+  assert.equal(
+    sha256(Buffer.from(JSON.stringify(VISUAL_RUNTIME_POLICY))),
+    VISUAL_ARTIFACT_CONTRACT.runtimePolicySha256,
+  );
 });
 
 test("decodes channel-major YOLO boxes into source pixels", () => {
@@ -94,3 +131,7 @@ test("NMS suppresses same-class duplicates but preserves another class", () => {
     ],
   );
 });
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}

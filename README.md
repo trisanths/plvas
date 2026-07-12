@@ -62,6 +62,25 @@ For a fast structured-PII-only check that skips the neural model:
 npm run redact -- --heuristics-only "Email me at alex@example.com"
 ```
 
+## Frozen v3 screenshot harness
+
+The optimized v10 visual + OCR + Rampart pipeline is packaged under
+[`harness/plva-v3`](harness/plva-v3), with a self-contained ZIP at
+`harness/plva-v3.zip`. It requires Node 20+ and local Chrome/Chromium, but no
+Python, `node_modules`, network, or Modal account at inference time:
+
+```bash
+cd harness/plva-v3
+node bin/plva-v3.mjs screenshot.png \
+  --output screenshot.redacted.png \
+  --report screenshot.redacted.json \
+  --profile high-recall
+```
+
+Run `node bin/smoke-test.mjs` for the standard fixture and
+`node bin/tall-regression.mjs` for the five-truth full-page OCR-context gate.
+See the harness README for measured latency, hashes, and release limitations.
+
 ## Frozen v2 screenshot baseline
 
 The immutable pre-retraining pipeline is packaged under
