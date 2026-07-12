@@ -1,0 +1,1033 @@
+{
+  "schema_version": 4,
+  "created_at": "2026-07-12T14:53:33Z",
+  "status": "stopped-early-high-water",
+  "stop_reason": "user-requested after repeated non-selection",
+  "best_checkpoint": {
+    "path": "safety-best.pt",
+    "sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+    "score": [
+      0.9468208092485549,
+      0.9759900650430919,
+      0.9445086705202312,
+      0.9652807678551956,
+      0.950275239431627,
+      -8.075065805954429
+    ],
+    "threshold_profile": {
+      "path": "safety-best-thresholds.json",
+      "sha256": "c5c9892e0b87d5356645ac70090e22c21f95efd41d2391ad854c45ec87ecea60",
+      "profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e"
+    }
+  },
+  "history": [
+    {
+      "epoch": 0,
+      "selected": true,
+      "selection_reason": "selected-calibrated-net-privacy-gain",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+        "privacy_coverage_recall_mean": 0.9759900650430919,
+        "compatible_coverage_recall_mean": 0.9652807678551956,
+        "secret_privacy_recall_minimum": 0.9468208092485549,
+        "secret_compatible_recall_minimum": 0.9445086705202312,
+        "map50_mean": 0.950275239431627
+      }
+    },
+    {
+      "epoch": 1,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "ca22bb1ad17ac769f3535e10835fff07ae2283d270bd0e2f1e707f96b7158bbb",
+        "privacy_coverage_recall_mean": 0.9759900650430919,
+        "compatible_coverage_recall_mean": 0.965255921900117,
+        "secret_privacy_recall_minimum": 0.9468208092485549,
+        "secret_compatible_recall_minimum": 0.9445086705202312,
+        "map50_mean": 0.9503197219312775
+      }
+    },
+    {
+      "epoch": 2,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "527e058c334ba3dff9683c73948a43cd36353cc62193ebafb4e8e7043d1c83f9",
+        "privacy_coverage_recall_mean": 0.9759652190880135,
+        "compatible_coverage_recall_mean": 0.9652310759450384,
+        "secret_privacy_recall_minimum": 0.9468208092485549,
+        "secret_compatible_recall_minimum": 0.9445086705202312,
+        "map50_mean": 0.950330074179222
+      }
+    },
+    {
+      "epoch": 3,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "3ec2fc65049ec52396cad1bac024c019957393c63aa0bec1259b98ce52fb2c68",
+        "privacy_coverage_recall_mean": 0.9759652190880135,
+        "compatible_coverage_recall_mean": 0.96520622998996,
+        "secret_privacy_recall_minimum": 0.945664739884393,
+        "secret_compatible_recall_minimum": 0.9433526011560693,
+        "map50_mean": 0.950340046503647
+      }
+    },
+    {
+      "epoch": 4,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "1cbaa0f9d3f413515e1230805e2a9d224560d717986faecf28cb589267e34ba6",
+        "privacy_coverage_recall_mean": 0.9759403731329349,
+        "compatible_coverage_recall_mean": 0.9651813840348815,
+        "secret_privacy_recall_minimum": 0.9445086705202312,
+        "secret_compatible_recall_minimum": 0.9421965317919075,
+        "map50_mean": 0.950362345536135
+      }
+    },
+    {
+      "epoch": 5,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "87bc4d6d9008aa050fbe7e88be28718191540dc5919485dcf8cd0631859c5f40",
+        "privacy_coverage_recall_mean": 0.9758658352676994,
+        "compatible_coverage_recall_mean": 0.9651068461696459,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9503836500544831
+      }
+    },
+    {
+      "epoch": 6,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "e4b138221ffce4fea731a974de7699f27368c1bfd464d30e9a8b641abb725be9",
+        "privacy_coverage_recall_mean": 0.9758409893126209,
+        "compatible_coverage_recall_mean": 0.9650820002145675,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.950406013067253
+      }
+    },
+    {
+      "epoch": 7,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "b794f0522257155ba3b93f1864993ace94a1a12e9d3deed34ed12aea0415e20b",
+        "privacy_coverage_recall_mean": 0.9758409893126209,
+        "compatible_coverage_recall_mean": 0.9650820002145675,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9504330591548573
+      }
+    },
+    {
+      "epoch": 8,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "4fdf39e120b4794407eacc0009fdb2a0eb0683f01cfe3cfb4d8255a5625d2d9a",
+        "privacy_coverage_recall_mean": 0.9758409893126209,
+        "compatible_coverage_recall_mean": 0.9650820002145675,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9504411782258178
+      }
+    },
+    {
+      "epoch": 9,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "8cb66a635125b95bffd3c3e7d15ac0e19bce049f7bf3a8d3c21b1c75dcdcad70",
+        "privacy_coverage_recall_mean": 0.9758409893126209,
+        "compatible_coverage_recall_mean": 0.9650323083044103,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9504297263954904
+      }
+    },
+    {
+      "epoch": 10,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "b4602cb0c3245f741aaaae7e852537cdefe50962762d964c9098a4ee37d3225f",
+        "privacy_coverage_recall_mean": 0.9757912974024638,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9504466777865861
+      }
+    },
+    {
+      "epoch": 11,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "271af78fbbe72f63ef2f8dd4ed2e43fb707f9e90a95fd2aa001ad03e34fe2ae3",
+        "privacy_coverage_recall_mean": 0.9757912974024638,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9504672532937741
+      }
+    },
+    {
+      "epoch": 12,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "decc7cbe5fde50e3f59c80a9e7d93a7d5158c84a2689bd776608da33c232144c",
+        "privacy_coverage_recall_mean": 0.9757912974024638,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.95046865325965
+      }
+    },
+    {
+      "epoch": 13,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "3429523de7609e40c14e31ece7df445fff89484a22bf3bafc548c1579e112dab",
+        "privacy_coverage_recall_mean": 0.9757912974024638,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9504924637805368
+      }
+    },
+    {
+      "epoch": 14,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "1b9c303ea6adc3ba700442d0a07a9fa2e560a72d8b5f89ffacf04b09d3badb10",
+        "privacy_coverage_recall_mean": 0.9757664514473854,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9505083937035801
+      }
+    },
+    {
+      "epoch": 15,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "8acc372e07340b1bd5ce8671383f9bc5dbad6dce769dc9e9e374a09e749eae58",
+        "privacy_coverage_recall_mean": 0.9757664514473854,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9505163636084777
+      }
+    },
+    {
+      "epoch": 16,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "7a728d70a6f670b23a44ec4cb40e523b4e7044ae6aba39f8f324281101072365",
+        "privacy_coverage_recall_mean": 0.9757416054923068,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9505160462084951
+      }
+    },
+    {
+      "epoch": 17,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "e44b85d8683d5227e34da516e5ebf8bb921febdf77ea1200ecd74777487224d3",
+        "privacy_coverage_recall_mean": 0.9757416054923068,
+        "compatible_coverage_recall_mean": 0.9649577704391747,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9505136357673264
+      }
+    },
+    {
+      "epoch": 18,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "ed567497f6a7e1803b21a7d76cb9b55f087efce9df78f8fce284e69dda589f33",
+        "privacy_coverage_recall_mean": 0.9757167595372283,
+        "compatible_coverage_recall_mean": 0.9649329244840963,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9505207872635544
+      }
+    },
+    {
+      "epoch": 19,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "706bb3a54caed93204dab46908cbc435f7b0793a80f8ffc8d845c1f02c02b2e7",
+        "privacy_coverage_recall_mean": 0.9757167595372283,
+        "compatible_coverage_recall_mean": 0.9652108566686433,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9398843930635838,
+        "map50_mean": 0.9505208697899904
+      }
+    },
+    {
+      "epoch": 20,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "0e185b124618be5aebb806516f718a52217ecb456afe5645aa71253cf9b5474d",
+        "privacy_coverage_recall_mean": 0.9759946917217752,
+        "compatible_coverage_recall_mean": 0.9654639428981118,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9387283236994219,
+        "map50_mean": 0.9505243994110624
+      }
+    },
+    {
+      "epoch": 21,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "3b08d76e388025a404c95de82104c509d34576b31c57e32f8d84676f9982722b",
+        "privacy_coverage_recall_mean": 0.9759946917217752,
+        "compatible_coverage_recall_mean": 0.9654639428981118,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9387283236994219,
+        "map50_mean": 0.9505303915057449
+      }
+    },
+    {
+      "epoch": 22,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "040773065c5ea0ea679b1aebfa9dd59d9ccdf0e2e44bdd6fd7d089623c3b284d",
+        "privacy_coverage_recall_mean": 0.9759946917217752,
+        "compatible_coverage_recall_mean": 0.9654639428981118,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9387283236994219,
+        "map50_mean": 0.9505344297684208
+      }
+    },
+    {
+      "epoch": 23,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "4847b7950c77eb76c483961a40d9e2603dcf9b4296066b75b05a9ddcebee00d6",
+        "privacy_coverage_recall_mean": 0.9759946917217752,
+        "compatible_coverage_recall_mean": 0.9653894050328762,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9505444200136941
+      }
+    },
+    {
+      "epoch": 24,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "eaf7079ae81dc415aaef010daf69898d7da26fe0822c23a69aefa0685a54f4e1",
+        "privacy_coverage_recall_mean": 0.9759946917217752,
+        "compatible_coverage_recall_mean": 0.9653894050328762,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9505636147693012
+      }
+    },
+    {
+      "epoch": 25,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "04debc949b0e452d33ecedc3e2d5fd4b73440d627377901d3758ade1af74198c",
+        "privacy_coverage_recall_mean": 0.9759946917217752,
+        "compatible_coverage_recall_mean": 0.9653894050328762,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.950577386217903
+      }
+    },
+    {
+      "epoch": 26,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "2ccaaa8b2b0e2c89b747e1144ee3c041cfcdfbe5a99ccdb9c5ed2d623563dbc1",
+        "privacy_coverage_recall_mean": 0.9759946917217752,
+        "compatible_coverage_recall_mean": 0.9653894050328762,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.950584682933078
+      }
+    },
+    {
+      "epoch": 27,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "d1099272c05c6493c6e5a2570ff06271c842f60d44645ac7b4910b8e57c5856a",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9653397131227192,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9505963618143725
+      }
+    },
+    {
+      "epoch": 28,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "6c603b901dfeafb8215bd325f48f023848cef9d2c4327f630110d75fc6ae5ed4",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9656176453072661,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9506106232514908
+      }
+    },
+    {
+      "epoch": 29,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "71ec0aebc0e3400105d09e59c0edfab0195cfa30af8d83214ee50dd0b81f97ea",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9656176453072661,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9506244905485105
+      }
+    },
+    {
+      "epoch": 30,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "c47c7364bd56e4588e904cff483d8cf4ec04a721e3d8da46c158dd83b50936c0",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9656424912623447,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9506259168467366
+      }
+    },
+    {
+      "epoch": 31,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "d91248a5a91d1f8f9e619c7b41a8b65cd002a742a83668740c0f46a74ae88067",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9656424912623447,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9506285249892417
+      }
+    },
+    {
+      "epoch": 32,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "65ede69333af32753509a9d688d3f75c1f032267b763de836e6bc946edf0d3f3",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9656424912623447,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9506169477744768
+      }
+    },
+    {
+      "epoch": 33,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "388aa1be901f9ce618852d2b06d33a886d8a7b542d736f9d4ce42017aeb01b0e",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9656424912623447,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9506201940030831
+      }
+    },
+    {
+      "epoch": 34,
+      "selected": false,
+      "selection_reason": "rejected-no-calibrated-runtime-improvement",
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "runtime_selection_metrics": {
+        "checkpoint_sha256": "9eb73d2d412fda4e21cc3104df3abb04b7cb6687e5da38b8e3f33cfd4a66d70e",
+        "privacy_coverage_recall_mean": 0.9759698457666968,
+        "compatible_coverage_recall_mean": 0.9656424912623447,
+        "secret_privacy_recall_minimum": 0.9421965317919075,
+        "secret_compatible_recall_minimum": 0.9364161849710982,
+        "map50_mean": 0.9506202409007439
+      }
+    }
+  ],
+  "training_config": {
+    "epochs": 35,
+    "requested_epochs": 40,
+    "image_size": 640,
+    "batch_size": 64,
+    "workers": 8,
+    "patience": 5,
+    "seed": 1311,
+    "stopped_early": true
+  },
+  "runtime_checkpoint_selection_evaluation": {
+    "metric_basis": "runtime-top1-fixed-profile-v1",
+    "used_for_checkpoint_selection": true,
+    "published_webpii_test_used": false,
+    "selected": {
+      "calibration_contract_sha256": "442a2f2dd06dd230dbe5c58ffe00382917f3f098265e8c138cb049ea1327ffdc",
+      "calibration_evidence": {
+        "kind": "per-class-recall-preserving-calibration",
+        "passed": true,
+        "profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+        "report": {
+          "baseline_profile": {
+            "ADDRESS": 0.1,
+            "CARD_NUMBER": 0.08,
+            "CVC": 0.01,
+            "EMAIL": 0.1,
+            "NAME": 0.1,
+            "PHONE": 0.1,
+            "SECRET": 0.08,
+            "SENSITIVE_FIELD": 0.08,
+            "SENSITIVE_IMAGE": 0.35
+          },
+          "baseline_profile_sha256": "7d95839d868d35aacf43c47cf579437652019fc89a60c521718862fd25dc6ff3",
+          "calibrated_profile": {
+            "ADDRESS": 0.099099,
+            "CARD_NUMBER": 0.079079,
+            "CVC": 0.009009,
+            "EMAIL": 0.099099,
+            "NAME": 0.099099,
+            "PHONE": 0.099099,
+            "SECRET": 0.079079,
+            "SENSITIVE_FIELD": 0.079079,
+            "SENSITIVE_IMAGE": 0.349349
+          },
+          "calibrated_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+          "passed": true,
+          "per_class": {
+            "ADDRESS": {
+              "baseline_threshold": 0.1,
+              "candidate_precision": 0.5860828454670289,
+              "candidate_recall": 0.9490026732469669,
+              "candidate_threshold": 0.099099,
+              "maximum_safe_threshold": 0.1,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 0.9490026732469669,
+              "target_recall": 0.9465026732469669
+            },
+            "CARD_NUMBER": {
+              "baseline_threshold": 0.08,
+              "candidate_precision": 0.6030996037628561,
+              "candidate_recall": 0.9610051993067591,
+              "candidate_threshold": 0.079079,
+              "maximum_safe_threshold": 0.08,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 0.9610051993067591,
+              "target_recall": 0.9585051993067591
+            },
+            "CVC": {
+              "baseline_threshold": 0.01,
+              "candidate_precision": 0.42599851117009313,
+              "candidate_recall": 1.0,
+              "candidate_threshold": 0.009009,
+              "maximum_safe_threshold": 0.01,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 1.0,
+              "target_recall": 0.9975
+            },
+            "EMAIL": {
+              "baseline_threshold": 0.1,
+              "candidate_precision": 0.6217135477420398,
+              "candidate_recall": 0.9611829944547134,
+              "candidate_threshold": 0.099099,
+              "maximum_safe_threshold": 0.1,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 0.9611829944547134,
+              "target_recall": 0.9586829944547135
+            },
+            "NAME": {
+              "baseline_threshold": 0.1,
+              "candidate_precision": 0.7035199915953003,
+              "candidate_recall": 0.9639953542392566,
+              "candidate_threshold": 0.099099,
+              "maximum_safe_threshold": 0.1,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 0.9639953542392566,
+              "target_recall": 0.9614953542392567
+            },
+            "PHONE": {
+              "baseline_threshold": 0.1,
+              "candidate_precision": 0.7194407196334505,
+              "candidate_recall": 0.9435548438751001,
+              "candidate_threshold": 0.099099,
+              "maximum_safe_threshold": 0.1,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 0.9435548438751001,
+              "target_recall": 0.9410548438751002
+            },
+            "SECRET": {
+              "baseline_threshold": 0.08,
+              "candidate_precision": 0.7593922984391114,
+              "candidate_recall": 0.9597402597402598,
+              "candidate_threshold": 0.079079,
+              "maximum_safe_threshold": 0.08,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 0.9597402597402598,
+              "target_recall": 0.9572402597402598
+            },
+            "SENSITIVE_FIELD": {
+              "baseline_threshold": 0.08,
+              "candidate_precision": 0.7300440011483843,
+              "candidate_recall": 0.9487453283502403,
+              "candidate_threshold": 0.079079,
+              "maximum_safe_threshold": 0.08,
+              "passed": true,
+              "recall_margin": 0.0030306139842332103,
+              "seed_operating_recall": 0.948214714366007,
+              "target_recall": 0.9457147143660071
+            },
+            "SENSITIVE_IMAGE": {
+              "baseline_threshold": 0.35,
+              "candidate_precision": 0.8771749351468193,
+              "candidate_recall": 0.8985507246376812,
+              "candidate_threshold": 0.349349,
+              "maximum_safe_threshold": 0.35,
+              "passed": true,
+              "recall_margin": 0.0024999999999999467,
+              "seed_operating_recall": 0.8985507246376812,
+              "target_recall": 0.8960507246376812
+            }
+          },
+          "policy": {
+            "maximum_calibration_recall_drop": 0.0025,
+            "maximum_candidate_threshold": "frozen-seed-baseline-per-class",
+            "maximum_threshold": 0.95,
+            "minimum_threshold": 0.005,
+            "name": "privacy-monotone-recall-preserving-calibration-v2",
+            "objective": "highest per-class confidence preserving frozen-seed recall without raising a known-safe threshold",
+            "published_test_used": false,
+            "schema_version": 2,
+            "selection_data": "synthetic-and-webpii-published-train-calibration"
+          },
+          "policy_sha256": "4505209bcef38fcd2cf3d8c186be5537ca1ea1817fd7dd1bbe99374dcd2c24cb",
+          "schema_version": 2,
+          "thresholds_never_raised": true
+        }
+      },
+      "calibration_passed": true,
+      "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+      "compatible_coverage_recall_mean": 0.9652807678551956,
+      "epoch": 0,
+      "map50_mean": 0.950275239431627,
+      "metric_basis": "runtime-top1-fixed-profile-v1",
+      "predictions_per_image_mean": 8.075065805954429,
+      "privacy_coverage_recall_mean": 0.9759900650430919,
+      "schema_version": 1,
+      "secret_compatible_recall_minimum": 0.9445086705202312,
+      "secret_privacy_recall_minimum": 0.9468208092485549,
+      "selection_inventory_contract_sha256": "d2457d0cf5ee12682c1b3842fc37c7b5c4b1efff578b4e864f939ca50df6b084",
+      "slices": {
+        "synthetic-guard": {
+          "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+          "compatible_coverage_recall": 0.9749861033907726,
+          "epoch": 0,
+          "fixed_profile_precision_mean": 0.7124029677630679,
+          "framework_global_f1_diagnostic": {
+            "per_class_precision": {
+              "ADDRESS": 0.994453721452912,
+              "CARD_NUMBER": 0.845016687108222,
+              "CVC": 1.0,
+              "EMAIL": 0.6433376125993121,
+              "NAME": 0.5441627523388394,
+              "PHONE": 0.9702254619759019,
+              "SECRET": 0.8578614761670601,
+              "SENSITIVE_FIELD": 0.7865271046806583,
+              "SENSITIVE_IMAGE": 0.9954309773390287
+            },
+            "per_class_recall": {
+              "ADDRESS": 0.8965112246793641,
+              "CARD_NUMBER": 1.0,
+              "CVC": 0.8752563386767924,
+              "EMAIL": 0.9199239609298986,
+              "NAME": 1.0,
+              "PHONE": 1.0,
+              "SECRET": 0.5733703232235119,
+              "SENSITIVE_FIELD": 0.7591063109506649,
+              "SENSITIVE_IMAGE": 1.0
+            },
+            "threshold": 0.23623623623623624
+          },
+          "hard_negative_images": 200,
+          "hard_negative_images_with_masks": 5,
+          "hard_negative_mask_rate": 0.025,
+          "image_inventory_sha256": "27b8d61f7584e4283fc1cde2ce3979030d454cce4077d5ec7ee32263ec1c24f2",
+          "images": 1999,
+          "irrecoverable_misses": 1,
+          "map50": 0.9520919382774795,
+          "metric_basis": "runtime-top1-fixed-profile-v1",
+          "other_sensitive_compatible_recall_mean": 0.9749748743718593,
+          "other_sensitive_privacy_recall_mean": 0.9916541038525963,
+          "per_class_ap50": {
+            "ADDRESS": 0.9881483296336308,
+            "CARD_NUMBER": 0.9797594541871993,
+            "CVC": 0.9943027485452519,
+            "EMAIL": 0.9146028256363584,
+            "NAME": 0.9810427534768209,
+            "PHONE": 0.9949502487562188,
+            "SECRET": 0.856302607716334,
+            "SENSITIVE_FIELD": 0.8647184765455034,
+            "SENSITIVE_IMAGE": 0.995
+          },
+          "per_class_ap50_95": {
+            "ADDRESS": 0.856704738307009,
+            "CARD_NUMBER": 0.7470388377528421,
+            "CVC": 0.6664376668113985,
+            "EMAIL": 0.7395138557335939,
+            "NAME": 0.829183316190629,
+            "PHONE": 0.8106808160268273,
+            "SECRET": 0.6268379201694299,
+            "SENSITIVE_FIELD": 0.6461616504037729,
+            "SENSITIVE_IMAGE": 0.9530267643353418
+          },
+          "per_class_compatible_coverage_recall": {
+            "ADDRESS": 0.99,
+            "CARD_NUMBER": 0.985,
+            "CVC": 0.98,
+            "EMAIL": 0.89,
+            "NAME": 1.0,
+            "PHONE": 1.0,
+            "SECRET": 0.96,
+            "SENSITIVE_FIELD": 0.9698492462311558,
+            "SENSITIVE_IMAGE": 1.0
+          },
+          "per_class_fixed_profile_precision": {
+            "ADDRESS": 0.9548334284713212,
+            "CARD_NUMBER": 0.6819663859865062,
+            "CVC": 0.7062868033534031,
+            "EMAIL": 0.49218183632744555,
+            "NAME": 0.37419602263423246,
+            "PHONE": 0.8370432933501022,
+            "SECRET": 0.7207390139419234,
+            "SENSITIVE_FIELD": 0.6474391773296052,
+            "SENSITIVE_IMAGE": 0.9969407484730712
+          },
+          "per_class_fixed_profile_recall": {
+            "ADDRESS": 0.9513169184214362,
+            "CARD_NUMBER": 1.0,
+            "CVC": 1.0,
+            "EMAIL": 0.94,
+            "NAME": 1.0,
+            "PHONE": 1.0,
+            "SECRET": 0.89,
+            "SENSITIVE_FIELD": 0.8241206030150754,
+            "SENSITIVE_IMAGE": 1.0
+          },
+          "per_class_irrecoverable_misses": {
+            "ADDRESS": 1,
+            "CARD_NUMBER": 0,
+            "CVC": 0,
+            "EMAIL": 0,
+            "NAME": 0,
+            "PHONE": 0,
+            "SECRET": 0,
+            "SENSITIVE_FIELD": 0,
+            "SENSITIVE_IMAGE": 0
+          },
+          "per_class_privacy_coverage_recall": {
+            "ADDRESS": 0.99,
+            "CARD_NUMBER": 0.985,
+            "CVC": 1.0,
+            "EMAIL": 0.975,
+            "NAME": 1.0,
+            "PHONE": 1.0,
+            "SECRET": 0.975,
+            "SENSITIVE_FIELD": 0.9849246231155779,
+            "SENSITIVE_IMAGE": 1.0
+          },
+          "per_class_support": {
+            "ADDRESS": 200,
+            "CARD_NUMBER": 200,
+            "CVC": 200,
+            "EMAIL": 200,
+            "NAME": 200,
+            "PHONE": 200,
+            "SECRET": 200,
+            "SENSITIVE_FIELD": 199,
+            "SENSITIVE_IMAGE": 200
+          },
+          "predictions": 2626,
+          "predictions_per_image": 1.3136568284142072,
+          "preprofile_saturated_images": 0,
+          "privacy_coverage_recall": 0.9899944413563091,
+          "runtime_contract_sha256": "7c45e3144e1c5e6d5a3011fb737673addaf76fa4b664dfef999fd34f0cd6ea34",
+          "runtime_geometry_sha256": "2353652dd632c9568a6477a1537c688bca50d6a08ea978b12091589ba55ad943",
+          "schema_version": 1,
+          "secret_compatible_recall_minimum": 0.96,
+          "secret_privacy_recall_minimum": 0.975,
+          "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+          "truth": 1799
+        },
+        "webpii-guard": {
+          "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+          "compatible_coverage_recall": 0.9555754323196184,
+          "epoch": 0,
+          "fixed_profile_precision_mean": 0.6562276868597058,
+          "framework_global_f1_diagnostic": {
+            "per_class_precision": {
+              "ADDRESS": 0.8475807088793497,
+              "CARD_NUMBER": 0.935583160310679,
+              "CVC": 0.9790584297360544,
+              "EMAIL": 0.8911876934595216,
+              "NAME": 0.9311181961585187,
+              "PHONE": 0.9247812055152869,
+              "SECRET": 0.9883574730637203,
+              "SENSITIVE_FIELD": 0.9805560124275513,
+              "SENSITIVE_IMAGE": 0.9623589923882777
+            },
+            "per_class_recall": {
+              "ADDRESS": 0.88040587518934,
+              "CARD_NUMBER": 0.8563221944044369,
+              "CVC": 0.8684566121062676,
+              "EMAIL": 0.9094176851186196,
+              "NAME": 0.9088599555414417,
+              "PHONE": 0.9059152305542617,
+              "SECRET": 0.9128185187374195,
+              "SENSITIVE_FIELD": 0.9184491978609626,
+              "SENSITIVE_IMAGE": 0.7941176470588235
+            },
+            "threshold": 0.5195195195195195
+          },
+          "hard_negative_images": 26,
+          "hard_negative_images_with_masks": 17,
+          "hard_negative_mask_rate": 0.6538461538461539,
+          "image_inventory_sha256": "8d91ed97577aeba55e544e290fda1f46b34c6171487e529b74b9956d13d2999e",
+          "images": 1963,
+          "irrecoverable_misses": 345,
+          "map50": 0.9484585405857745,
+          "metric_basis": "runtime-top1-fixed-profile-v1",
+          "other_sensitive_compatible_recall_mean": 0.9478007133295551,
+          "other_sensitive_privacy_recall_mean": 0.9582606972046145,
+          "per_class_ap50": {
+            "ADDRESS": 0.8954833796331372,
+            "CARD_NUMBER": 0.9225713181967938,
+            "CVC": 0.9890767818753563,
+            "EMAIL": 0.947662172571756,
+            "NAME": 0.9492542453231334,
+            "PHONE": 0.9542993147559081,
+            "SECRET": 0.9879889808872295,
+            "SENSITIVE_FIELD": 0.9664823223094892,
+            "SENSITIVE_IMAGE": 0.9233083497191679
+          },
+          "per_class_ap50_95": {
+            "ADDRESS": 0.7322686324853434,
+            "CARD_NUMBER": 0.7748143896683427,
+            "CVC": 0.859983825293219,
+            "EMAIL": 0.8208336470470068,
+            "NAME": 0.811451005036228,
+            "PHONE": 0.7929547435966843,
+            "SECRET": 0.8820679500231675,
+            "SENSITIVE_FIELD": 0.8773881617884156,
+            "SENSITIVE_IMAGE": 0.5666291026280528
+          },
+          "per_class_compatible_coverage_recall": {
+            "ADDRESS": 0.9513724683869641,
+            "CARD_NUMBER": 0.9445086705202312,
+            "CVC": 0.9829721362229102,
+            "EMAIL": 0.9568655643421998,
+            "NAME": 0.9434741187678628,
+            "PHONE": 0.9692594317652539,
+            "SECRET": 1.0,
+            "SENSITIVE_FIELD": 0.9792780748663101,
+            "SENSITIVE_IMAGE": 0.8865546218487395
+          },
+          "per_class_fixed_profile_precision": {
+            "ADDRESS": 0.5616681007247267,
+            "CARD_NUMBER": 0.5518054805191267,
+            "CVC": 0.38628072696352006,
+            "EMAIL": 0.627282760603966,
+            "NAME": 0.7193542804327836,
+            "PHONE": 0.683903776527746,
+            "SECRET": 0.7900691177396101,
+            "SENSITIVE_FIELD": 0.703658361729888,
+            "SENSITIVE_IMAGE": 0.8820265764959845
+          },
+          "per_class_fixed_profile_recall": {
+            "ADDRESS": 0.915698581165827,
+            "CARD_NUMBER": 0.9317919075144508,
+            "CVC": 1.0,
+            "EMAIL": 0.9482386772106398,
+            "NAME": 0.9498253413782153,
+            "PHONE": 0.96040987424313,
+            "SECRET": 0.9849462365591398,
+            "SENSITIVE_FIELD": 0.9682058324556009,
+            "SENSITIVE_IMAGE": 0.823530493914045
+          },
+          "per_class_irrecoverable_misses": {
+            "ADDRESS": 241,
+            "CARD_NUMBER": 4,
+            "CVC": 0,
+            "EMAIL": 6,
+            "NAME": 77,
+            "PHONE": 6,
+            "SECRET": 0,
+            "SENSITIVE_FIELD": 8,
+            "SENSITIVE_IMAGE": 3
+          },
+          "per_class_privacy_coverage_recall": {
+            "ADDRESS": 0.9528117610774134,
+            "CARD_NUMBER": 0.9468208092485549,
+            "CVC": 1.0,
+            "EMAIL": 0.9618979151689432,
+            "NAME": 0.9549063194664973,
+            "PHONE": 0.9892873777363763,
+            "SECRET": 1.0,
+            "SENSITIVE_FIELD": 0.9872994652406417,
+            "SENSITIVE_IMAGE": 0.9033613445378151
+          },
+          "per_class_support": {
+            "ADDRESS": 9727,
+            "CARD_NUMBER": 865,
+            "CVC": 646,
+            "EMAIL": 1391,
+            "NAME": 3149,
+            "PHONE": 2147,
+            "SECRET": 465,
+            "SENSITIVE_FIELD": 1496,
+            "SENSITIVE_IMAGE": 238
+          },
+          "predictions": 29124,
+          "predictions_per_image": 14.836474783494651,
+          "preprofile_saturated_images": 0,
+          "privacy_coverage_recall": 0.9619856887298748,
+          "runtime_contract_sha256": "7c45e3144e1c5e6d5a3011fb737673addaf76fa4b664dfef999fd34f0cd6ea34",
+          "runtime_geometry_sha256": "2353652dd632c9568a6477a1537c688bca50d6a08ea978b12091589ba55ad943",
+          "schema_version": 1,
+          "secret_compatible_recall_minimum": 0.9445086705202312,
+          "secret_privacy_recall_minimum": 0.9468208092485549,
+          "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+          "truth": 20124
+        }
+      },
+      "threshold_profile": {
+        "ADDRESS": 0.099099,
+        "CARD_NUMBER": 0.079079,
+        "CVC": 0.009009,
+        "EMAIL": 0.099099,
+        "NAME": 0.099099,
+        "PHONE": 0.099099,
+        "SECRET": 0.079079,
+        "SENSITIVE_FIELD": 0.079079,
+        "SENSITIVE_IMAGE": 0.349349
+      },
+      "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e"
+    }
+  },
+  "train_results": {},
+  "distribution": {
+    "mode": "agpl-development",
+    "commercial_license_approved": false,
+    "closed_source_release_allowed": false
+  },
+  "checkpoint_persistence": {
+    "committed_epochs": 35,
+    "progress_path": "safety-selection-progress.json",
+    "progress_sha256": "2bee1402b4ca4eb906a3fc0372b3ca26320e6efb9be8b7f4d55b1582d29691e8",
+    "resume_contract": {
+      "attempt_id": "safe-head-v10",
+      "attempt_manifest_sha256": "53150ce6fbe0e7847b0754b08fe0508e7244af9bb54190fbd30edf80ce685d1f",
+      "augmentation_policy_sha256": "412846770c4432f98d8b4802dab61fac084dc3378823e024239cc731e3dca899",
+      "class_contract_sha256": "03e3dc0198c528510444a4c68a912aa5e70a119bbca6421854b042292cfe7b0d",
+      "dataset_yaml_sha256": "43d7287352454d30b4f046f2c7f038875929654e2347320977738caefcc3a96d",
+      "local_stage_root": "/tmp/plva-visual-training-data/plva-visual-agpl-ats-v3-safe-head-v10",
+      "optimizer_policy_sha256": "df4be2b077452477a23a2f564446affa86379b3a2e8d65f1be5e886e1120a937",
+      "output_dir": "/__modal/volumes/vo-ZYAn1TOOSHYTwIWlxjpfrW/runs/plva-visual-agpl-ats-v3/visual/training-safe-head-v10",
+      "replay_contract": {
+        "configuration_sha256": "bb2d89b93477233bc33f4f9d41dc0612daf2ff6b992bfa34568e34afa8373b64",
+        "manifest_sha256": "34d5e1c6c74da63ac79c9e4c22fc4625e65180bd989bddfa204982ff28411a0f",
+        "records": 67392,
+        "train_list_sha256": "f2b7c3f2fa61d4050a363118616c5dc2d40edb3c9269e31e5d562e6eed9be3ab"
+      },
+      "run_id": "plva-visual-agpl-ats-v3",
+      "runtime_selection_contract": {
+        "path": "/tmp/plva-visual-training-data/plva-visual-agpl-ats-v3-safe-head-v10/selection/runtime-selection-contract.json",
+        "policy_name": "runtime-top1-fixed-profile-v1",
+        "policy_sha256": "83f8f75ff308f820ef7d7ce269f7f6673e394979522acf40324e0a59c6d426f5",
+        "sha256": "00485bf4452b386e4041d17a420049475800c6a96c4c510e5b6964b88af8be3f"
+      },
+      "safe_fine_tune_policy_sha256": "e651eb49708361bd63b0ffdcc7caa2b9043688883fb761e76ff3ea5dfd5a70dc",
+      "seed_checkpoint_sha256": "123e6d1d2129a8ba72eec9d736410b1d1b8f910319f987395dc4b12c4132d7bb",
+      "source_contract_sha256": "de57bf7f26f34ea874885ff47af27e6d955a59fc26796971e9a7174ca546cd9a",
+      "source_manifest_sha256": "75c94e9e4d87b8f2214fa70363c4ee25d2eaf2e2f9fd2a638f904144dd2bbf42",
+      "staging_manifest_sha256": "ba360a3f0e60c3158825fd7519e6f1b8df278b0a498a93195b78b78cdfc38636",
+      "total_epochs": 40
+    }
+  },
+  "publication_blockers": [
+    "AGPL development output cannot ship in a closed-source product; obtain an Ultralytics Enterprise license",
+    "WebPII and base-checkpoint license obligations require review",
+    "full training schedule stopped early by user",
+    "cross-runtime ONNX parity not yet proven",
+    "detector INT8 quantization not yet approved"
+  ]
+}

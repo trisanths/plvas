@@ -15,15 +15,15 @@ export const DETECTOR_CLASSES = Object.freeze([
 // correctly but is poorly calibrated for that class.
 export const THRESHOLD_PROFILES = Object.freeze({
   "high-recall": Object.freeze({
-    NAME: 0.1,
-    EMAIL: 0.1,
-    PHONE: 0.1,
-    ADDRESS: 0.1,
-    CARD_NUMBER: 0.08,
-    CVC: 0.01,
-    SECRET: 0.08,
-    SENSITIVE_FIELD: 0.08,
-    SENSITIVE_IMAGE: 0.35,
+    NAME: 0.099099,
+    EMAIL: 0.099099,
+    PHONE: 0.099099,
+    ADDRESS: 0.099099,
+    CARD_NUMBER: 0.079079,
+    CVC: 0.009009,
+    SECRET: 0.079079,
+    SENSITIVE_FIELD: 0.079079,
+    SENSITIVE_IMAGE: 0.349349,
   }),
   balanced: Object.freeze({
     NAME: 0.25,
@@ -155,18 +155,20 @@ export function nonMaximumSuppression(
 ) {
   const ordered = [...proposals].sort((left, right) => right.score - left.score);
   const selected = [];
+  const selectedByClass = new Map();
 
   for (const proposal of ordered) {
+    const sameClass = selectedByClass.get(proposal.classId) ?? [];
     if (
-      selected.some(
-        (current) =>
-          current.classId === proposal.classId &&
-          intersectionOverUnion(current, proposal) > iouThreshold,
+      sameClass.some(
+        (current) => intersectionOverUnion(current, proposal) > iouThreshold,
       )
     ) {
       continue;
     }
     selected.push(proposal);
+    sameClass.push(proposal);
+    selectedByClass.set(proposal.classId, sameClass);
     if (selected.length >= maxDetections) break;
   }
 

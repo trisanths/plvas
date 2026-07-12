@@ -287,6 +287,8 @@ npm ci --prefix training/runtime-parity
 
 python -m training.visual.quantize_detector_onnx \
   --source training/artifacts/<run-id>/visual/detector.onnx \
+  --runtime-thresholds training/artifacts/<run-id>/visual/safety-best-thresholds.json \
+  --detector-manifest training/artifacts/<run-id>/visual/detector_manifest.json \
   --calibration-images /path/to/training-only/images \
   --evaluation-images /path/to/frozen-quantization-acceptance/images \
   --evaluation-labels /path/to/frozen-quantization-acceptance/labels \
@@ -296,14 +298,18 @@ python -m training.visual.quantize_detector_onnx \
 
 The command always writes `detector_quantization_report.json`. A rejected run
 leaves no candidate ONNX behind and preserves any previously approved output.
-Only a passing run atomically creates `detector.int8.onnx`. Normal FP32 export
-records quantization as `gated-not-produced`; it never silently substitutes a
-quantized graph.
+Only a passing run creates `detector.int8.onnx` and copies the same frozen
+`safety-best-thresholds.json` into the quantized bundle. Quantization verifies
+the threshold artifact against `detector_manifest.json` and evaluates FP32/INT8
+parity at that calibrated profile; no hardcoded operating point is used. Normal
+FP32 export records quantization as `gated-not-produced`; it never silently
+substitutes a quantized graph. Visual export and download include the same
+checkpoint-bound threshold artifact alongside `detector.onnx`.
 
 ## Modal
 
-The application defines CPU preparation/reference jobs, L4 semantic training,
-H200 detector training with a 64-image batch, export jobs, durable run storage, and a separate model
+The application defines CPU preparation/reference jobs, L4 semantic and detector
+training with a 64-image batch, export jobs, durable run storage, and a separate model
 cache. The local environment currently needs a Modal token before these jobs can
 run.
 
@@ -358,7 +364,7 @@ needed. To use a purchased commercial checkpoint instead, upload
 pass `--visual-commercial-license-approved`.
 
 For a bounded test candidate, combine `--quick` with an explicit epoch count,
-for example `--visual-epochs 20`. The full profile defaults to 100 epochs.
+for example `--visual-epochs 20`. The full profile defaults to 40 epochs.
 
 For a run that must include a staged ATS supplement, fail closed instead of
 silently falling back to WebPII plus built-in synthetic data:
@@ -374,16 +380,29 @@ uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
   --run-id <run-id>
 ```
 
-The visual trainer selects checkpoints only on the screen-native synthetic
-validation split. A frozen seed is evaluated on that split before epoch 1,
-persisted as the epoch `-1` incumbent, and copied to `safety-best.pt`; a worse
-first epoch therefore cannot displace it. Selection uses a constrained
-high-water rule rather than a raw lexicographic tuple: meaningful secret-recall
-gains must stay within per-class/aggregate recall and precision regression
-bounds; sub-0.01 secret gains require a real other-sensitive recall gain; and
-precision can break a tie only with no recall regression. Missing or non-finite
-all-class metrics abort the attempt while the previous committed epoch remains
-safe. The full per-class state is replayed and verified on schema-3 resume.
+The visual trainer selects checkpoints with the same top-1, class-aware runtime
+policy used by PLVA, not Ultralytics' moving global-max-F1 threshold. Before
+replay construction, it holds out about 10% of WebPII **train** by identity
+group, splits that holdout into calibration and guard halves, and splits the
+screen-native synthetic validation set into separate calibration and guard
+halves. The two calibration halves fit a per-class threshold profile; they do
+not select checkpoints. Each checkpoint must then pass the real 4%-padding,
+class-aware-NMS, 0.90-IoT coverage policy independently on both the synthetic
+guard and WebPII-train guard slices. The WebPII holdout is removed from the
+training replay list, and the published WebPII and ATS test splits remain
+excluded from calibration and selection.
+
+The immutable frozen seed is evaluated before epoch 1 and persisted as the
+epoch `-1` incumbent. Candidate thresholds may move downward only enough to
+preserve the seed's calibration recall; no candidate may raise a known-safe
+per-class seed threshold, and inference retains a fail-closed 0.005 floor. Selection compares a
+candidate against both the seed and current incumbent and gates AP50/AP50-95,
+privacy and class-compatible coverage, hard-negative mask rate, prediction
+burden, pre-profile saturation, irrecoverable low-floor misses, exact inventory,
+and per-class support. A worse first epoch therefore cannot displace the seed.
+Ultralytics' global precision/recall values are retained only as diagnostics.
+Missing, non-finite, or hash-inconsistent evidence aborts the attempt while the
+previous committed epoch remains safe.
 
 The trainer evaluates both the frozen input checkpoint and the final
 safety-selected checkpoint on the untouched published WebPII test split. When
@@ -391,10 +410,11 @@ the verified ATS supplement is present, it also evaluates both checkpoints on
 the identity-disjoint 200-image ATS test split. Those test metrics are written
 to separate manifest blocks and never participate in checkpoint selection.
 
-`visual-train` runs on an H200. Before Ultralytics starts, it validates the
+`visual-train` currently runs on an L4, the highest tier available in the
+credit-only workspace without adding a payment method. Before Ultralytics starts, it validates the
 composed source contracts and copies WebPII, screen-native synthetic data, and
 the optional ATS supplement from the Modal Volume to container-local ephemeral
-disk with 64 bounded I/O workers on the 16-CPU H200 container. Every source and
+disk with 64 bounded I/O workers on the 16-CPU container. Every source and
 destination file is still hashed and the complete source/target tree inventory
 is verified; the configured worker count is recorded in the staging manifest.
 Training and evaluation then use only those verified local paths. The immutable
@@ -402,45 +422,99 @@ Volume provenance is persisted inside the selected attempt root as
 `staged-dataset.yaml`, `staged-source-manifest.json`, and
 `dataset-staging-manifest.json`.
 
+The staged training split is converted into a deterministic replay list with a
+40 WebPII / 22 screen-native synthetic / 2 ATS epoch-level mix, matching the
+eligible unique-source inventory. Only the
+WebPII-training-eligible partition can enter replay. The automatic block plan
+covers every eligible source image at least once without overexposing the
+synthetic/ATS domains, and reserves synthetic exposure for CVC,
+SECRET, and SENSITIVE_IMAGE. Ultralytics globally shuffles the list, so these
+are epoch-multiset guarantees rather than exact physical-batch quotas. The
+replay list, selection partitions, inventories, and manifests are independently
+hash-bound and persisted for resume verification.
+
 New training attempts disable `optimizer=auto` and record an immutable
-`stable-adamw-v1` policy: AdamW, `lr0=0.0005`, `lrf=0.1`, beta1/momentum `0.9`,
-weight decay `0.0005`, one warmup epoch, warmup momentum `0.8`, zero bias warmup
-LR, cosine decay, and `nbs=64`. Existing loss, conservative screenshot
+`safe-output-classifier-adamw-v5-fp32-trust-region` policy: AdamW,
+`lr0=0.0000001`, `lrf=0.1`, beta1/momentum `0.9`,
+zero weight decay, one warmup epoch, warmup momentum `0.8`, zero bias warmup
+LR, cosine decay, `nbs=64`, and uniform class pressure (`cls_pw=0`). This
+replaces the rejected v6 canary's `lr0=0.00001` and
+`cls_pw=0.5`: that policy improved aggregate mAP50 but weighted ADDRESS only
+0.382x and dropped its validation recall by 0.2587, so the hard canary stopped
+after one epoch and preserved the seed. Layers 0-22, the box-regression/DFL
+branch, shared `model.23.cv3` feature convolutions, and every BatchNorm
+statistic/affine parameter stay frozen; only the weight and bias of the three
+final `model.23.cv3.{0,1,2}.2` class-output convolutions train (six tensors,
+1,755 elements). The ADDRESS row is additionally protected on all three scales:
+registered gradient hooks zero it before every optimizer step, and the durable
+checkpoint projection restores and audits the row byte-exactly against the
+immutable reference. Before evaluation, each Ultralytics FP16 checkpoint is
+atomically replaced with a projected FP32 EMA checkpoint: approved output
+tensors come from the live EMA and every other tensor is copied exactly from
+the immutable invocation reference. This prevents a 1e-7 update from being
+rounded into roughly 6.1e-5 FP16 steps. A post-epoch exact-state audit rejects
+any frozen-tensor mutation and requires a non-noop class-output change.
+Existing loss and conservative screenshot
 augmentation, AMP, and gradient clipping remain unchanged. The manifest also
 records a manual monitoring policy: review/stop after two consecutive epochs
 with an absolute mAP50 drop over 0.10 or validation classification loss over 2x
 the seed; automatic stopping is intentionally disabled.
 
-After every model-save callback, training atomically writes schema-3
-`safety-selection-progress.json` with full per-class selection state and the
-last, aggregate-best, and PLVA safety-best checkpoint hashes, then commits the
-Volume. Ultralytics is invoked with `save=True` and `save_period=1`, so completed
-epochs are durable if the container is preempted.
+The L4 trainer requests 16 CPUs and uses 16 persistent DataLoader workers at
+the contract-pinned batch size of 64. A resumed run may override worker count,
+but batch size, seed, optimizer, learning-rate policy, data hashes, and class
+contract remain immutable.
 
-Start the stable v3 retry as a new named, non-resume attempt. The snapshot path
+After every model-save callback, training atomically writes schema-4
+`safety-selection-progress.json` with the full calibrated runtime-selection
+state and hashes for `last.pt`, aggregate-best, `safety-best.pt`, and
+`safety-best-thresholds.json`, then commits the Volume. The selected threshold
+profile is checkpoint-bound and travels with export, quantization, and download
+artifacts. Ultralytics is invoked with `save=True` and `save_period=1`, so every
+accepted or rejected completed epoch is durable if the container is preempted.
+For a named attempt, the frozen seed, provenance, and complete staged-data
+metadata are published atomically before GPU evaluation. If the container dies
+before schema-4 progress exists, recovery restarts from the seed only after
+discarding a strict allowlist of pre-epoch diagnostics; any checkpoint,
+optimizer/scaler state, epoch history, sentinel, symlink, partial progress, or
+unknown artifact makes recovery fail closed.
+
+`safe-head-v7`, `safe-head-v8`, and `safe-head-v9` are retained as immutable diagnostic evidence
+but are not promotable. The full published WebPII release test rejected v7;
+v8's first-epoch canary separately added 31 irrecoverable WebPII guard misses
+and stopped before epoch 2. v9 froze detector geometry and reduced the learning
+rate to 1e-7, but the framework's FP16 checkpoint serialization quantized the
+remaining classifier update and added five irrecoverable WebPII ADDRESS misses.
+Its canary stopped automatically, and its `safety-best.pt` remains byte-identical
+to the original seed. `safe-head-v10` therefore starts a fresh 40-epoch run from
+that original verified seed with the six-tensor FP32-projected boundary rather
+than continuing any rejected attempt.
+
+Start v10 as a new named, non-resume attempt. The snapshot path
 is confined to `/vol/snapshots`, its caller-pinned SHA-256 is checked before and
 after copying, and path/hash/license/inherited provenance are persisted under
-`visual/training-stable/`. The existing `visual/training/` attempt is never
+`visual/training-safe-head-v10/`. Existing attempts are never
 deleted or overwritten:
 
 ```bash
-uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
+MODAL_PROFILE=friend-plva uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
   --stage visual-train \
   --run-id plva-visual-agpl-ats-v3 \
-  --visual-attempt stable \
+  --visual-attempt safe-head-v10 \
   --visual-seed-checkpoint snapshots/2026-07-11-plva-visual-agpl-ats-v3-epoch2-safety/aggregate-best-epoch2.pt \
   --visual-seed-sha256 123e6d1d2129a8ba72eec9d736410b1d1b8f910319f987395dc4b12c4132d7bb \
+  --visual-seed-provenance /tmp/plva-friend-migrate-20260712/seed-provenance-safe-head-v10.json \
   --visual-epochs 40
 ```
 
-After an interrupted stable attempt has stopped, resume the same attempt with
+After an interrupted safe-head attempt has stopped, resume the same attempt with
 the original total epoch count:
 
 ```bash
-uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
+MODAL_PROFILE=friend-plva uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
   --stage visual-train \
   --run-id plva-visual-agpl-ats-v3 \
-  --visual-attempt stable \
+  --visual-attempt safe-head-v10 \
   --visual-epochs 40 \
   --visual-resume
 ```
@@ -448,10 +522,12 @@ uvx --from modal==1.5.2 modal run --detach training/modal_app.py \
 Resume loads only that attempt's hash-validated persisted `last.pt` and passes
 `resume=True` to Ultralytics, restoring optimizer/scaler/EMA state and deriving
 the scheduler position from the saved epoch. It also replays PLVA's seed
-incumbent and complete constrained safety-selection history. The run ID,
+incumbent, calibrated profile artifact, and complete runtime-selection history.
+The run ID,
 attempt ID/root, frozen seed hash, attempt provenance, staged dataset/source
 manifests, class contract, original epoch total, optimizer and augmentation
-policies, and all progress checkpoint hashes must match. Named attempts cannot
+policies, selection inventory/policy hashes, and all progress checkpoint hashes
+must match. Named attempts cannot
 be force-deleted, and resume cannot replace the frozen seed. The local
 entrypoint launches long visual training with `.spawn().get()`.
 
@@ -463,18 +539,18 @@ relaunch after that job has exited or been preempted.
 The earlier `visual/training/` v3 attempt used auto-selected MuSGD and is
 intentionally stopped. Its old schema-1/2 progress is incompatible with the
 stable optimizer/selection contract and must not be resumed. Export and
-download the stable attempt explicitly after it completes:
+download the safe-head attempt explicitly after it completes:
 
 ```bash
-uvx --from modal==1.5.2 modal run training/modal_app.py \
+MODAL_PROFILE=friend-plva uvx --from modal==1.5.2 modal run training/modal_app.py \
   --stage visual-export \
   --run-id plva-visual-agpl-ats-v3 \
-  --visual-attempt stable
+  --visual-attempt safe-head-v10
 
-uvx --from modal==1.5.2 modal run training/modal_app.py \
+MODAL_PROFILE=friend-plva uvx --from modal==1.5.2 modal run training/modal_app.py \
   --stage visual-download \
   --run-id plva-visual-agpl-ats-v3 \
-  --visual-attempt stable
+  --visual-attempt safe-head-v8
 ```
 
 ## Tests

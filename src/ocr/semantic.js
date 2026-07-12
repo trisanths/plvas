@@ -1,5 +1,4 @@
 import {
-  applyPolicy,
   detectHeuristics,
   detectNer,
   premask,
@@ -7,16 +6,33 @@ import {
 } from "@nationaldesignstudio/rampart";
 
 import { getRampartClassifier, RAMPART_MIN_SCORE } from "../rampart.js";
-import { filterContextualHits } from "./policy.js";
+import {
+  associateContextualIdentityRegions,
+  associateCueValues,
+} from "./association.js";
+import {
+  applyScreenshotRedactionPolicy,
+  filterContextualHits,
+} from "./policy.js";
 import { detectSensitiveCues } from "./rules.js";
+
+export function warmOcrSemanticClassifier(device = "wasm") {
+  return getRampartClassifier(device);
+}
 
 export async function classifyOcrRegions(
   regions,
   { device = "wasm", onStage = () => {} } = {},
 ) {
+  const associated = associateCueValues(regions);
+  const contextual = associateContextualIdentityRegions(regions);
   const document = buildOcrDocument(regions);
   if (!document.text) {
-    return { regions: [], mode: "not-needed", warning: null };
+    return {
+      regions: mergeSameOcrBox([...associated, ...contextual]),
+      mode: "not-needed",
+      warning: null,
+    };
   }
 
   const heuristic = detectHeuristics(document.text);
@@ -43,7 +59,7 @@ export async function classifyOcrRegions(
     warning = "Rampart NER unavailable; OCR used structured and secret-cue checks only";
   }
 
-  const redactable = applyPolicy(allSpans);
+  const redactable = applyScreenshotRedactionPolicy(allSpans);
   const sensitive = [];
   for (const entry of document.entries) {
     const rampartHits = filterContextualHits(
@@ -78,7 +94,11 @@ export async function classifyOcrRegions(
     });
   }
 
-  return { regions: sensitive, mode, warning };
+  return {
+    regions: mergeSameOcrBox([...sensitive, ...associated, ...contextual]),
+    mode,
+    warning,
+  };
 }
 
 function buildOcrDocument(regions) {
@@ -98,4 +118,26 @@ function buildOcrDocument(regions) {
     });
   }
   return { text, entries };
+}
+
+function mergeSameOcrBox(regions) {
+  const merged = new Map();
+  for (const region of regions) {
+    const key = [region.x1, region.y1, region.x2, region.y2].join(":");
+    const current = merged.get(key);
+    if (!current) {
+      merged.set(key, region);
+      continue;
+    }
+    const labels = [...new Set([...(current.labels ?? []), ...(region.labels ?? [])])];
+    const sources = [...new Set([...(current.sources ?? []), ...(region.sources ?? [])])];
+    merged.set(key, {
+      ...current,
+      label: labels.join(" + "),
+      labels,
+      sources,
+      score: Math.max(current.score ?? 0, region.score ?? 0),
+    });
+  }
+  return [...merged.values()];
 }

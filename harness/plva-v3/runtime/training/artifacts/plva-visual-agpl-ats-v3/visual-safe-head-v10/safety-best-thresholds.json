@@ -1,0 +1,166 @@
+{
+  "calibration_contract_sha256": "442a2f2dd06dd230dbe5c58ffe00382917f3f098265e8c138cb049ea1327ffdc",
+  "calibration_evidence": {
+    "kind": "per-class-recall-preserving-calibration",
+    "passed": true,
+    "profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+    "report": {
+      "baseline_profile": {
+        "ADDRESS": 0.1,
+        "CARD_NUMBER": 0.08,
+        "CVC": 0.01,
+        "EMAIL": 0.1,
+        "NAME": 0.1,
+        "PHONE": 0.1,
+        "SECRET": 0.08,
+        "SENSITIVE_FIELD": 0.08,
+        "SENSITIVE_IMAGE": 0.35
+      },
+      "baseline_profile_sha256": "7d95839d868d35aacf43c47cf579437652019fc89a60c521718862fd25dc6ff3",
+      "calibrated_profile": {
+        "ADDRESS": 0.099099,
+        "CARD_NUMBER": 0.079079,
+        "CVC": 0.009009,
+        "EMAIL": 0.099099,
+        "NAME": 0.099099,
+        "PHONE": 0.099099,
+        "SECRET": 0.079079,
+        "SENSITIVE_FIELD": 0.079079,
+        "SENSITIVE_IMAGE": 0.349349
+      },
+      "calibrated_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e",
+      "passed": true,
+      "per_class": {
+        "ADDRESS": {
+          "baseline_threshold": 0.1,
+          "candidate_precision": 0.5860828454670289,
+          "candidate_recall": 0.9490026732469669,
+          "candidate_threshold": 0.099099,
+          "maximum_safe_threshold": 0.1,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 0.9490026732469669,
+          "target_recall": 0.9465026732469669
+        },
+        "CARD_NUMBER": {
+          "baseline_threshold": 0.08,
+          "candidate_precision": 0.6030996037628561,
+          "candidate_recall": 0.9610051993067591,
+          "candidate_threshold": 0.079079,
+          "maximum_safe_threshold": 0.08,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 0.9610051993067591,
+          "target_recall": 0.9585051993067591
+        },
+        "CVC": {
+          "baseline_threshold": 0.01,
+          "candidate_precision": 0.42599851117009313,
+          "candidate_recall": 1.0,
+          "candidate_threshold": 0.009009,
+          "maximum_safe_threshold": 0.01,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 1.0,
+          "target_recall": 0.9975
+        },
+        "EMAIL": {
+          "baseline_threshold": 0.1,
+          "candidate_precision": 0.6217135477420398,
+          "candidate_recall": 0.9611829944547134,
+          "candidate_threshold": 0.099099,
+          "maximum_safe_threshold": 0.1,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 0.9611829944547134,
+          "target_recall": 0.9586829944547135
+        },
+        "NAME": {
+          "baseline_threshold": 0.1,
+          "candidate_precision": 0.7035199915953003,
+          "candidate_recall": 0.9639953542392566,
+          "candidate_threshold": 0.099099,
+          "maximum_safe_threshold": 0.1,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 0.9639953542392566,
+          "target_recall": 0.9614953542392567
+        },
+        "PHONE": {
+          "baseline_threshold": 0.1,
+          "candidate_precision": 0.7194407196334505,
+          "candidate_recall": 0.9435548438751001,
+          "candidate_threshold": 0.099099,
+          "maximum_safe_threshold": 0.1,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 0.9435548438751001,
+          "target_recall": 0.9410548438751002
+        },
+        "SECRET": {
+          "baseline_threshold": 0.08,
+          "candidate_precision": 0.7593922984391114,
+          "candidate_recall": 0.9597402597402598,
+          "candidate_threshold": 0.079079,
+          "maximum_safe_threshold": 0.08,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 0.9597402597402598,
+          "target_recall": 0.9572402597402598
+        },
+        "SENSITIVE_FIELD": {
+          "baseline_threshold": 0.08,
+          "candidate_precision": 0.7300440011483843,
+          "candidate_recall": 0.9487453283502403,
+          "candidate_threshold": 0.079079,
+          "maximum_safe_threshold": 0.08,
+          "passed": true,
+          "recall_margin": 0.0030306139842332103,
+          "seed_operating_recall": 0.948214714366007,
+          "target_recall": 0.9457147143660071
+        },
+        "SENSITIVE_IMAGE": {
+          "baseline_threshold": 0.35,
+          "candidate_precision": 0.8771749351468193,
+          "candidate_recall": 0.8985507246376812,
+          "candidate_threshold": 0.349349,
+          "maximum_safe_threshold": 0.35,
+          "passed": true,
+          "recall_margin": 0.0024999999999999467,
+          "seed_operating_recall": 0.8985507246376812,
+          "target_recall": 0.8960507246376812
+        }
+      },
+      "policy": {
+        "maximum_calibration_recall_drop": 0.0025,
+        "maximum_candidate_threshold": "frozen-seed-baseline-per-class",
+        "maximum_threshold": 0.95,
+        "minimum_threshold": 0.005,
+        "name": "privacy-monotone-recall-preserving-calibration-v2",
+        "objective": "highest per-class confidence preserving frozen-seed recall without raising a known-safe threshold",
+        "published_test_used": false,
+        "schema_version": 2,
+        "selection_data": "synthetic-and-webpii-published-train-calibration"
+      },
+      "policy_sha256": "4505209bcef38fcd2cf3d8c186be5537ca1ea1817fd7dd1bbe99374dcd2c24cb",
+      "schema_version": 2,
+      "thresholds_never_raised": true
+    }
+  },
+  "checkpoint_sha256": "5fcd871b76a6fe456d004ef465ad5cf97616b9f475080711ba0d059a5807a9ad",
+  "metric_basis": "runtime-top1-fixed-profile-v1",
+  "schema_version": 1,
+  "selection_inventory_contract_sha256": "d2457d0cf5ee12682c1b3842fc37c7b5c4b1efff578b4e864f939ca50df6b084",
+  "threshold_profile": {
+    "ADDRESS": 0.099099,
+    "CARD_NUMBER": 0.079079,
+    "CVC": 0.009009,
+    "EMAIL": 0.099099,
+    "NAME": 0.099099,
+    "PHONE": 0.099099,
+    "SECRET": 0.079079,
+    "SENSITIVE_FIELD": 0.079079,
+    "SENSITIVE_IMAGE": 0.349349
+  },
+  "threshold_profile_sha256": "919da6455fc93ffb8ef929eeb5ded012b102c97a083b421cd0b5226b8be8b90e"
+}

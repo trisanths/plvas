@@ -1,0 +1,213 @@
+{
+  "declared_provenance": {
+    "attempt_id": "safe-head-v10",
+    "created_at": "2026-07-12T11:47:14Z",
+    "kind": "plva-visual-frozen-seed-training-provenance",
+    "launch": {
+      "effective_gpu": "L4",
+      "epochs": 40,
+      "force_allowed": false,
+      "gpu_fallback_reason": "Modal requires a payment method on this account before H200 functions may run",
+      "modal_profile": "friend-plva",
+      "mode": "fresh-non-resume-from-original-safe-seed",
+      "requested_gpu": "H200",
+      "resume_requested": false
+    },
+    "local_verification": {
+      "compileall_passed": true,
+      "git_diff_check_passed": true,
+      "independent_review_focused_tests_passed": 46,
+      "independent_safety_review_passed": true,
+      "pytest_passed": 141,
+      "pytest_subtests_passed": 10,
+      "real_checkpoint_trainable_inventory_passed": true,
+      "real_fp32_checkpoint_projection_probe_passed": true,
+      "real_gradient_mask_probe_passed": true,
+      "ruff_passed": true,
+      "source_snapshot_byte_parity_passed": true
+    },
+    "persistence": {
+      "checkpoint_bound_threshold_artifact": "safety-best-thresholds.json",
+      "first_epoch_fail_closed_canary": true,
+      "pre_epoch_recovery_fail_closed": true,
+      "progress_schema_version": 4,
+      "resume_checkpoint_contains_optimizer_and_scaler": true,
+      "save_period_epochs": 1,
+      "volume_commit_after_each_audited_epoch": true,
+      "zero_irrecoverable_miss_increase_gate_unchanged": true
+    },
+    "preflight": {
+      "audit_path_bound_selection_contract_sha256": "5514f31749cd33bbcea5c8c2c997cb2ca778aba5502873ec98304b23c954656c",
+      "immutable_input_hashes": {
+        "combined_calibration_images": "56004f200194291333573ef8165b8736a1731652bdfd735efaf1132ab08a8a49",
+        "synthetic_guard_images": "20a2bab4f950113a6d0e55edf10977d195eea22d635d5a544c91b8ddbd02a6c8",
+        "synthetic_split_manifest": "ad4ac150bf7c9e9335a53f2c8516b44187bdb6c1955103789b4ee62eff55d778",
+        "webpii_eligible_images": "c8cef7a18a0bd664cb129ff474fd015382af74eeb045affcfb697532cbea8e61",
+        "webpii_guard_images": "9ed628e03b6d9efa094b04691d45fafa66ddb22e3bc3ba2aa8d29a4a2fb2eea5",
+        "webpii_split_manifest": "7e0bf77e57d9536de86c25d29b673beb1f8a4d14d86bb070040bac51c6eaddcf"
+      },
+      "modal_app_id": "ap-GkNcsRzt0PeqGQOeqeDEE6",
+      "passed": true,
+      "published_test_used": false,
+      "replay": {
+        "manifest_sha256": "16c6fd3f520bb402c3824ac67e3542646a376cc3a311249f4c72871a9b24c38c",
+        "records": 67392,
+        "supplemental_ats_records": 2106,
+        "synthetic_records": 23166,
+        "unique_supplemental_ats_images": 1800,
+        "unique_synthetic_images": 20000,
+        "unique_webpii_images": 36407,
+        "webpii_records": 42120
+      },
+      "stage": "visual-selection-audit",
+      "stale_ultralytics_label_cache_excluded": true,
+      "synthetic_validation_records": {
+        "calibration": 2001,
+        "guard": 1999
+      },
+      "webpii_train_records": {
+        "calibration": 2014,
+        "eligible_for_replay": 36407,
+        "guard": 1963,
+        "held_out_total": 3977
+      }
+    },
+    "projection_runtime_audit": {
+      "all_canaries_passed": true,
+      "candidate_order_independent": true,
+      "gpu": "L4",
+      "modal_app_id": "ap-MITF9ot9Tnb7zqBhsHB2W6",
+      "output_path": "runs/plva-visual-agpl-ats-v3/diagnostics/v9-projection-runtime-audit.json",
+      "output_sha256": "30f9619a6d1fa44d23567184747fd4b1974ca61ab178fbf3dd754f7710c43bb0",
+      "payload_sha256": "850ef02c52351d9d26c704352756b85111cfdba6d0c2aa83eaacf70c1ba77055",
+      "protected_address_candidate": {
+        "calibrated_runtime_canary_passed": true,
+        "checkpoint_sha256": "2c34fa7d56c0be22d96140b7f07185f8dbb14ba34d2bb3e8523f6720419a1056",
+        "label": "protect-address",
+        "selected": true,
+        "selection_reason": "selected-calibrated-net-privacy-gain",
+        "synthetic_irrecoverable_miss_increase_gate_passed": true,
+        "webpii_irrecoverable_miss_increase_gate_passed": true
+      },
+      "published_test_used": false
+    },
+    "rejected_predecessors": [
+      {
+        "attempt_id": "safe-head-v7",
+        "checkpoint_sha256": "545b1e34ca5f509aad5a9b6363940d903d6d7c1543a661671e8db44c254d02f7",
+        "promotion_allowed": false,
+        "reason": "full WebPII runtime regression at the previously frozen operational thresholds",
+        "webpii_forensic_report_sha256": "19c59c2c6b6e26f43e808e55055c6ea5444ce123659321699fe0258ae7c5b9d5",
+        "webpii_threshold_diagnostic_sha256": "1ec5a3ba7eb074c9bf502fa179b4b62ce5df11d0b95f38ba38ea7c658f49d1d2"
+      },
+      {
+        "attempt_id": "safe-head-v8",
+        "checkpoint_sha256": "e40e005483cfd8562224ef873ce2cffc6a416f17abc47c0e77f56d13022536cc",
+        "promotion_allowed": false,
+        "reason": "first-epoch canary added 31 irrecoverable WebPII guard misses and failed CARD_NUMBER secret-class recall gates",
+        "safety_progress_sha256": "7a09e0ce9f117481ecb4b4a35c5b720815aaef403a5495b3f9853b72a654d73c"
+      },
+      {
+        "attempt_id": "safe-head-v9",
+        "checkpoint_sha256": "6085f6ce5e445e72e74f4dffba699bc80ddd280d447bfa3775ea4849ce5bce24",
+        "promotion_allowed": false,
+        "reason": "one low-confidence proposal fell below the 0.005 pre-profile floor, producing five nested ADDRESS misses after FP16 one-ULP shared-classifier-tower drift",
+        "safety_progress_sha256": "3a08189b553abd918079ca11a75ab8b873d6afe25ff6e9e0cc4283bbe48bb9f9"
+      }
+    ],
+    "run_id": "plva-visual-agpl-ats-v3",
+    "runtime_selection": {
+      "calibration_policy": "privacy-monotone-recall-preserving-calibration-v2",
+      "calibration_sources": [
+        "screen-native synthetic validation calibration half",
+        "identity-grouped WebPII published-train calibration half"
+      ],
+      "candidate_thresholds_may_exceed_frozen_seed_profile": false,
+      "checkpoint_guard_slices": [
+        "screen-native synthetic validation guard half",
+        "identity-grouped WebPII published-train guard half"
+      ],
+      "contract_schema_version": 2,
+      "global_max_f1_metrics_select_checkpoints": false,
+      "policy": "runtime-top1-fixed-profile-v1",
+      "published_ats_test_used_for_calibration_or_selection": false,
+      "published_webpii_test_used_for_calibration_or_selection": false,
+      "webpii_holdout_excluded_from_replay": true
+    },
+    "schema_version": 2,
+    "seed": {
+      "path": "snapshots/2026-07-11-plva-visual-agpl-ats-v3-epoch2-safety/aggregate-best-epoch2.pt",
+      "role": "immutable-original-safe-seed",
+      "sha256": "123e6d1d2129a8ba72eec9d736410b1d1b8f910319f987395dc4b12c4132d7bb"
+    },
+    "source_snapshot": {
+      "file_count_including_sha256sums": 99,
+      "git_commit": "4e667371d2efa6ea4d5420d8c2e119cecdcb3eaa",
+      "local_and_remote_byte_parity_passed": true,
+      "path": "runs/plva-visual-agpl-ats-v3/inputs/source-snapshot-safe-head-v10",
+      "sha256sums_sha256": "c77b73c8ce2040863b24537c9ec3645045463fed8f0b091cc3b5aaf0f0235d59"
+    },
+    "training_policy": {
+      "all_batchnorm_frozen": true,
+      "backbone_frozen": true,
+      "box_regression_frozen": true,
+      "cls_pw": 0.0,
+      "first_epoch_non_noop_classifier_change_required": true,
+      "lr0": 1e-07,
+      "lrf": 0.1,
+      "optimizer": "AdamW",
+      "optimizer_policy": "safe-output-classifier-adamw-v5-fp32-trust-region",
+      "optimizer_state_precision": "ultralytics-native-serialization",
+      "persisted_model_and_ema_precision": "float32",
+      "post_epoch_exact_frozen_state_parity_required": true,
+      "protected_classifier_rows": {
+        "ADDRESS": 3
+      },
+      "protected_row_durable_projection_required": true,
+      "protected_row_gradient_mask_required": true,
+      "replay_source_quota": {
+        "supplemental_ats": 2,
+        "synthetic": 22,
+        "webpii": 40
+      },
+      "shared_classifier_towers_frozen": true,
+      "trainable_element_count": 1755,
+      "trainable_tensor_count": 6,
+      "trainable_tensors": [
+        "model.23.cv3.0.2.weight",
+        "model.23.cv3.0.2.bias",
+        "model.23.cv3.1.2.weight",
+        "model.23.cv3.1.2.bias",
+        "model.23.cv3.2.2.weight",
+        "model.23.cv3.2.2.bias"
+      ],
+      "weight_decay": 0.0
+    }
+  },
+  "inherited_detector_provenance": {
+    "checkpoint_sha256": "251cded66a14c63625f26689a5e8f5bcda0cfd80769c9d6f2e78c865aff9f827",
+    "created_at": "2026-07-12T00:41:18Z",
+    "reason": "Continue from the safety-selected v2 weights on corrected and rebalanced visual data without retaining the old optimizer state.",
+    "schema_version": 1,
+    "source_checkpoint_path": "runs/plva-visual-agpl-test-v2/visual/training/safety-best.pt",
+    "source_onnx_sha256": "450ee07452d618eb3159d565f1787b17a8cabbfee3e72686e932460be576cc2e",
+    "source_run_id": "plva-visual-agpl-test-v2",
+    "source_snapshot_path": "snapshots/2026-07-11-plva-visual-agpl-test-v2/safety-best.pt",
+    "source_training_manifest_sha256": "c91d071ff79dbdb5f914e13119c9d0eb83e30fd2cdfada26215ad408382bdbe0",
+    "warm_start_mode": "weights-only-optimizer-and-schedule-reset"
+  },
+  "inherited_detector_provenance_sha256": "7574f36fbf15c6167f9058fefa6ec71fefb72a0416d111ec7ddee003950aabf7",
+  "kind": "frozen-volume-snapshot-seed",
+  "license": {
+    "path": "/__modal/volumes/vo-ZYAn1TOOSHYTwIWlxjpfrW/runs/plva-visual-agpl-ats-v3/inputs/detector-base-license.txt",
+    "sha256": "7e6aa3d0b5ea51b398a1acf2278ab2da090776f963ff7e8e3eac316785e72f04",
+    "value": "AGPL-3.0-only"
+  },
+  "schema_version": 1,
+  "source": {
+    "bytes": 15897953,
+    "expected_sha256": "123e6d1d2129a8ba72eec9d736410b1d1b8f910319f987395dc4b12c4132d7bb",
+    "path": "/__modal/volumes/vo-ZYAn1TOOSHYTwIWlxjpfrW/snapshots/2026-07-11-plva-visual-agpl-ats-v3-epoch2-safety/aggregate-best-epoch2.pt",
+    "sha256": "123e6d1d2129a8ba72eec9d736410b1d1b8f910319f987395dc4b12c4132d7bb"
+  }
+}

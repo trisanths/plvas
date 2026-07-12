@@ -1,0 +1,66 @@
+{
+  "attempt_id": "safe-head-v10",
+  "attempt_root": "/__modal/volumes/vo-ZYAn1TOOSHYTwIWlxjpfrW/runs/plva-visual-agpl-ats-v3/visual/training-safe-head-v10",
+  "mode": "new-non-resume-from-frozen-seed",
+  "optimizer_policy": {
+    "cls_pw": 0.0,
+    "cos_lr": true,
+    "lr0": 1e-07,
+    "lrf": 0.1,
+    "momentum": 0.9,
+    "nbs": 64,
+    "optimizer": "AdamW",
+    "warmup_bias_lr": 0.0,
+    "warmup_epochs": 1.0,
+    "warmup_momentum": 0.8,
+    "weight_decay": 0.0
+  },
+  "optimizer_policy_sha256": "df4be2b077452477a23a2f564446affa86379b3a2e8d65f1be5e886e1120a937",
+  "pre_epoch_stage": {
+    "files": {
+      "dataset_yaml": {
+        "bytes": 442,
+        "filename": "staged-dataset.yaml",
+        "sha256": "43d7287352454d30b4f046f2c7f038875929654e2347320977738caefcc3a96d"
+      },
+      "replay_manifest": {
+        "bytes": 5942,
+        "filename": "staged-replay-manifest.json",
+        "sha256": "34d5e1c6c74da63ac79c9e4c22fc4625e65180bd989bddfa204982ff28411a0f"
+      },
+      "replay_train_list": {
+        "bytes": 9009766,
+        "filename": "staged-replay-train-list.txt",
+        "sha256": "f2b7c3f2fa61d4050a363118616c5dc2d40edb3c9269e31e5d562e6eed9be3ab"
+      },
+      "runtime_selection_contract": {
+        "bytes": 7745,
+        "filename": "staged-runtime-selection-contract.json",
+        "sha256": "00485bf4452b386e4041d17a420049475800c6a96c4c510e5b6964b88af8be3f"
+      },
+      "source_manifest": {
+        "bytes": 10694,
+        "filename": "staged-source-manifest.json",
+        "sha256": "75c94e9e4d87b8f2214fa70363c4ee25d2eaf2e2f9fd2a638f904144dd2bbf42"
+      },
+      "staging_manifest": {
+        "bytes": 4533,
+        "filename": "dataset-staging-manifest.json",
+        "sha256": "ba360a3f0e60c3158825fd7519e6f1b8df278b0a498a93195b78b78cdfc38636"
+      }
+    },
+    "schema_version": 1
+  },
+  "resume_allowed": true,
+  "run_id": "plva-visual-agpl-ats-v3",
+  "schema_version": 1,
+  "seed": {
+    "bytes": 15897953,
+    "checkpoint": "frozen-seed.pt",
+    "provenance": "frozen-seed-provenance.json",
+    "provenance_bytes": 9938,
+    "provenance_sha256": "37a6736a1fe851905ac445d3935219b36e849be442ad784a35b4eebed12a656e",
+    "sha256": "123e6d1d2129a8ba72eec9d736410b1d1b8f910319f987395dc4b12c4132d7bb",
+    "source_path": "/__modal/volumes/vo-ZYAn1TOOSHYTwIWlxjpfrW/snapshots/2026-07-11-plva-visual-agpl-ats-v3-epoch2-safety/aggregate-best-epoch2.pt"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "model_sha256": "2ed3f25c9bee375dc1683cf0ffa2044374b6bc35dd89a465a7dce6451ce8b928",
+  "golden_vectors_sha256": "b1173a64c1f56b125205a2d237bcec3e469b69e452ea56c815d05d24cb49c8b9",
+  "backends": {
+    "node": {
+      "passed": true,
+      "package": "onnxruntime-node",
+      "package_version": "1.27.0",
+      "execution_providers_requested": [
+        "cpu"
+      ],
+      "vectors_checked": 104,
+      "maximum_absolute_error": 0,
+      "maximum_relative_error": 0,
+      "failed_samples": []
+    },
+    "wasm": {
+      "passed": true,
+      "package": "onnxruntime-web",
+      "package_version": "1.27.0",
+      "execution_providers_requested": [
+        "wasm"
+      ],
+      "vectors_checked": 104,
+      "maximum_absolute_error": 0.0001983642578125,
+      "maximum_relative_error": 89406.96716308594,
+      "failed_samples": []
+    }
+  }
+}

@@ -17,6 +17,10 @@ from typing import Any, Iterable, Sequence
 from training.schema import sha256_file
 from training.visual.create_onnx_goldens import create as create_onnx_goldens
 from training.visual.prepare_webpii import DETECTOR_CLASSES
+from training.visual.runtime_threshold_artifact import (
+    RUNTIME_THRESHOLD_ARTIFACT_NAME,
+    load_exported_runtime_threshold_artifact,
+)
 from training.visual.train_detector import SECRET_VISUAL_CLASSES
 
 
@@ -34,32 +38,6 @@ MAXIMUM_CLASS_RECALL_DROP = 0.01
 MAXIMUM_PRECISION_DROP = 0.02
 REQUIRED_PARITY_BACKENDS = ("node", "wasm")
 RUNTIME_PACKAGE_VERSION = "1.27.0"
-
-THRESHOLD_PROFILES = {
-    "high-recall": {
-        "NAME": 0.10,
-        "EMAIL": 0.10,
-        "PHONE": 0.10,
-        "ADDRESS": 0.10,
-        "CARD_NUMBER": 0.08,
-        "CVC": 0.01,
-        "SECRET": 0.08,
-        "SENSITIVE_FIELD": 0.08,
-        "SENSITIVE_IMAGE": 0.35,
-    },
-    "balanced": {
-        "NAME": 0.25,
-        "EMAIL": 0.25,
-        "PHONE": 0.25,
-        "ADDRESS": 0.25,
-        "CARD_NUMBER": 0.20,
-        "CVC": 0.03,
-        "SECRET": 0.20,
-        "SENSITIVE_FIELD": 0.20,
-        "SENSITIVE_IMAGE": 0.50,
-    },
-}
-
 
 @dataclass(frozen=True)
 class Detection:
@@ -336,7 +314,7 @@ def _iou(
     return intersection / union if union > 0 else 0.0
 
 
-def _decode(output: Any, profile: str) -> list[Detection]:
+def _decode(output: Any, thresholds: dict[str, float]) -> list[Detection]:
     import numpy as np
 
     if output.shape[0] != 1 or output.shape[1] != 4 + len(DETECTOR_CLASSES):
@@ -346,7 +324,6 @@ def _decode(output: Any, profile: str) -> list[Detection]:
     class_ids = np.argmax(class_scores, axis=0)
     anchors = np.arange(class_scores.shape[1])
     scores = class_scores[class_ids, anchors]
-    thresholds = THRESHOLD_PROFILES[profile]
     detections: list[Detection] = []
     for anchor in np.flatnonzero(
         scores
@@ -440,6 +417,7 @@ def compare_models(
     images: Sequence[Path],
     images_root: Path,
     labels_root: Path,
+    threshold_profiles: dict[str, dict[str, float]],
 ) -> dict[str, Any]:
     import numpy as np
     import onnxruntime as ort
@@ -471,7 +449,7 @@ def compare_models(
             "source_proposals": 0,
             "source_proposals_covered": 0,
         }
-        for profile in THRESHOLD_PROFILES
+        for profile in threshold_profiles
     }
 
     for image_path in images:
@@ -497,8 +475,9 @@ def compare_models(
 
         truth = _truth(image_path, images_root, labels_root)
         for profile, counters in profile_counts.items():
-            source_detections = _decode(source_output, profile)
-            candidate_detections = _decode(candidate_output, profile)
+            thresholds = threshold_profiles[profile]
+            source_detections = _decode(source_output, thresholds)
+            candidate_detections = _decode(candidate_output, thresholds)
             support, source_matched = _truth_matches(truth, source_detections)
             _, candidate_matched = _truth_matches(truth, candidate_detections)
             counters["support"].update(support)
@@ -631,7 +610,17 @@ def gate_report(report: dict[str, Any]) -> dict[str, Any]:
             f"evaluation support for {name} is below {MINIMUM_CLASS_SUPPORT}",
         )
 
+    operational_thresholds = report.get("operational_thresholds", {})
+    profile_name = operational_thresholds.get("profile_name")
+    require(
+        profile_name == "high-recall",
+        "quantization did not use the frozen operational threshold profile",
+    )
     comparison = report["comparison"]
+    require(
+        set(comparison.get("profiles", {})) == {profile_name},
+        "quantization comparison profile inventory changed",
+    )
     raw = comparison["raw_output"]
     require(
         raw["non_finite_candidate_values"] == 0,
@@ -715,14 +704,38 @@ def quantize_and_validate(args: argparse.Namespace) -> dict[str, Any]:
     source = args.source.resolve()
     if not source.is_file() or source.suffix.lower() != ".onnx":
         raise RuntimeError("source must be an existing ONNX model")
+    runtime_thresholds_value = getattr(args, "runtime_thresholds", None)
+    if runtime_thresholds_value is None:
+        raise RuntimeError("quantization requires safety-best-thresholds.json")
+    runtime_thresholds = Path(runtime_thresholds_value).resolve()
+    detector_manifest_value = getattr(args, "detector_manifest", None)
+    detector_manifest = (
+        Path(detector_manifest_value).resolve()
+        if detector_manifest_value is not None
+        else source.with_name("detector_manifest.json")
+    )
+    operational_thresholds = load_exported_runtime_threshold_artifact(
+        source,
+        runtime_thresholds,
+        detector_manifest,
+    )
+    threshold_profiles = {
+        "high-recall": operational_thresholds["threshold_profile"]
+    }
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     final_model = output_dir / "detector.int8.onnx"
+    final_runtime_thresholds = output_dir / RUNTIME_THRESHOLD_ARTIFACT_NAME
     previous_output = (
         {
             "path": final_model.name,
             "bytes": final_model.stat().st_size,
             "sha256": sha256_file(final_model),
+            "runtime_thresholds_sha256": (
+                sha256_file(final_runtime_thresholds)
+                if final_runtime_thresholds.is_file()
+                else None
+            ),
         }
         if final_model.exists()
         else None
@@ -743,7 +756,7 @@ def quantize_and_validate(args: argparse.Namespace) -> dict[str, Any]:
     evaluation_hashes = _content_hashes(evaluation)
 
     report: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": "rejected",
         "release_eligible": False,
@@ -751,6 +764,25 @@ def quantize_and_validate(args: argparse.Namespace) -> dict[str, Any]:
             "path": str(source),
             "bytes": source.stat().st_size,
             "sha256": sha256_file(source),
+        },
+        "operational_thresholds": {
+            "profile_name": "high-recall",
+            "path": str(runtime_thresholds),
+            "sha256": operational_thresholds["sha256"],
+            "metric_basis": operational_thresholds["metric_basis"],
+            "checkpoint_sha256": operational_thresholds[
+                "checkpoint_sha256"
+            ],
+            "threshold_profile": operational_thresholds[
+                "threshold_profile"
+            ],
+            "threshold_profile_sha256": operational_thresholds[
+                "threshold_profile_sha256"
+            ],
+            "detector_manifest": str(detector_manifest),
+            "detector_manifest_sha256": operational_thresholds[
+                "detector_manifest_sha256"
+            ],
         },
         "strategy": {
             "format": "QDQ",
@@ -794,21 +826,36 @@ def quantize_and_validate(args: argparse.Namespace) -> dict[str, Any]:
                 evaluation,
                 args.evaluation_images.resolve(),
                 args.evaluation_labels.resolve(),
+                threshold_profiles,
             )
             report["cross_runtime"] = run_cross_runtime_parity(
                 candidate, work_dir, args.runtime_parity_dir
             )
             report["gate"] = gate_report(report)
             if report["gate"]["passed"]:
-                staged = output_dir / ".detector.int8.onnx.tmp"
+                staged = work_dir / "detector.int8.onnx.approved"
+                staged_thresholds = work_dir / RUNTIME_THRESHOLD_ARTIFACT_NAME
                 shutil.copy2(candidate, staged)
+                shutil.copy2(runtime_thresholds, staged_thresholds)
+                if (
+                    sha256_file(staged_thresholds)
+                    != operational_thresholds["sha256"]
+                ):
+                    raise RuntimeError(
+                        "quantized bundle runtime thresholds changed while copying"
+                    )
                 os.replace(staged, final_model)
+                os.replace(staged_thresholds, final_runtime_thresholds)
                 report["status"] = "approved"
                 report["release_eligible"] = True
                 report["output"] = {
                     "path": final_model.name,
                     "bytes": final_model.stat().st_size,
                     "sha256": sha256_file(final_model),
+                    "runtime_thresholds": {
+                        "path": final_runtime_thresholds.name,
+                        "sha256": sha256_file(final_runtime_thresholds),
+                    },
                 }
             else:
                 report["output"] = None
@@ -842,6 +889,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration-images", type=Path, required=True)
     parser.add_argument("--evaluation-images", type=Path, required=True)
     parser.add_argument("--evaluation-labels", type=Path, required=True)
+    parser.add_argument(
+        "--runtime-thresholds",
+        type=Path,
+        required=True,
+        help="exported checkpoint-bound safety-best-thresholds.json",
+    )
+    parser.add_argument(
+        "--detector-manifest",
+        type=Path,
+        help="detector_manifest.json (defaults beside --source)",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--runtime-parity-dir",

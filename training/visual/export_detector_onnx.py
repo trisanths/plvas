@@ -9,6 +9,70 @@ from pathlib import Path
 from typing import Any
 
 from training.schema import sha256_file
+from training.visual.runtime_threshold_artifact import (
+    RUNTIME_THRESHOLD_ARTIFACT_NAME,
+    load_runtime_threshold_artifact,
+)
+
+
+def _selected_checkpoint_sha256(args: argparse.Namespace, source_sha256: str) -> str:
+    training_manifest_value = getattr(args, "training_manifest", None)
+    if training_manifest_value is None:
+        if args.source.suffix.lower() == ".pt":
+            return source_sha256
+        raise RuntimeError(
+            "ONNX export requires a training manifest to bind runtime thresholds"
+        )
+    training_manifest_path = Path(training_manifest_value)
+    if not training_manifest_path.is_file():
+        raise RuntimeError("training manifest is missing")
+    try:
+        training = json.loads(training_manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("training manifest is not valid UTF-8 JSON") from exc
+    checkpoint_sha256 = training.get("best_checkpoint", {}).get("sha256")
+    if not isinstance(checkpoint_sha256, str):
+        raise RuntimeError("training manifest has no selected checkpoint SHA-256")
+    if args.source.suffix.lower() == ".pt" and checkpoint_sha256 != source_sha256:
+        raise RuntimeError("training manifest selected another checkpoint")
+    return checkpoint_sha256
+
+
+def stage_runtime_threshold_artifact(
+    args: argparse.Namespace,
+    *,
+    expected_checkpoint_sha256: str,
+) -> dict[str, Any]:
+    source_value = getattr(args, "runtime_thresholds", None)
+    if source_value is None:
+        raise RuntimeError("export requires the selected runtime threshold artifact")
+    source = Path(source_value)
+    normalized = load_runtime_threshold_artifact(
+        source,
+        expected_checkpoint_sha256=expected_checkpoint_sha256,
+    )
+    destination = args.output_dir / RUNTIME_THRESHOLD_ARTIFACT_NAME
+    if source.resolve() != destination.resolve():
+        shutil.copy2(source, destination)
+    staged = load_runtime_threshold_artifact(
+        destination,
+        expected_checkpoint_sha256=expected_checkpoint_sha256,
+    )
+    if staged["sha256"] != normalized["sha256"]:
+        raise RuntimeError("exported runtime threshold artifact changed while copying")
+    return {
+        "path": destination.name,
+        "sha256": staged["sha256"],
+        "metric_basis": staged["metric_basis"],
+        "checkpoint_sha256": staged["checkpoint_sha256"],
+        "threshold_profile_sha256": staged["threshold_profile_sha256"],
+        "calibration_contract_sha256": staged[
+            "calibration_contract_sha256"
+        ],
+        "selection_inventory_contract_sha256": staged[
+            "selection_inventory_contract_sha256"
+        ],
+    }
 
 
 def normalize_onnx(path: Path) -> None:
@@ -34,6 +98,9 @@ def write_artifact_metadata(
     report: dict[str, Any],
     destination: Path,
 ) -> tuple[str, str]:
+    operational_thresholds = report.get("operational_thresholds")
+    if not isinstance(operational_thresholds, dict):
+        raise RuntimeError("export report has no operational threshold binding")
     training_manifest_path = getattr(args, "training_manifest", None)
     training = (
         json.loads(training_manifest_path.read_text(encoding="utf-8"))
@@ -48,8 +115,12 @@ def write_artifact_metadata(
     smoke_only = epochs <= 2
     blockers = list(training.get("publication_blockers", []))
     selected_evaluation = training.get("selected_checkpoint_evaluation", {})
-    selected_secret_recall = selected_evaluation.get(
-        "minimum_secret_class_recall"
+    runtime_selection = training.get(
+        "runtime_checkpoint_selection_evaluation", {}
+    )
+    selected_runtime = runtime_selection.get("selected", {})
+    selected_secret_recall = selected_runtime.get(
+        "secret_privacy_recall_minimum"
     )
     if smoke_only:
         blockers.append("two-epoch development smoke is not a quality candidate")
@@ -60,7 +131,7 @@ def write_artifact_metadata(
     if "detector INT8 quantization not yet approved" not in blockers:
         blockers.append("detector INT8 quantization not yet approved")
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at": report["created_at"],
         "status": "development-smoke" if smoke_only else "trained-unpublished",
         "release_eligible": False,
@@ -82,6 +153,7 @@ def write_artifact_metadata(
             "sha256": report["source_sha256"],
             "license": args.source_license,
         },
+        "operational_thresholds": operational_thresholds,
         "training_manifest": (
             {
                 "path": str(training_manifest_path),
@@ -95,6 +167,7 @@ def write_artifact_metadata(
             "metrics": training.get("train_results", {}),
             "selection": training.get("best_checkpoint", {}).get("score"),
             "selected_checkpoint_evaluation": selected_evaluation,
+            "runtime_checkpoint_selection_evaluation": runtime_selection,
             "distribution": training.get("distribution", {}),
         },
         "quantization": {
@@ -108,7 +181,12 @@ def write_artifact_metadata(
                 "operators": ["Conv"],
                 "runtime_target": "onnxruntime-web@1.27.0/wasm",
             },
-            "approval_command": "python -m training.visual.quantize_detector_onnx",
+            "approval_command": (
+                "python -m training.visual.quantize_detector_onnx "
+                "--source detector.onnx "
+                f"--runtime-thresholds {operational_thresholds['path']} "
+                "--detector-manifest detector_manifest.json"
+            ),
             "required_evidence": [
                 "at least 50% artifact byte reduction",
                 "frozen all-class holdout safety parity",
@@ -123,8 +201,10 @@ def write_artifact_metadata(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     metrics = manifest["training"]["metrics"]
-    secret_recall = training.get("selected_checkpoint_evaluation", {}).get(
-        "minimum_secret_class_recall"
+    secret_recall = selected_runtime.get("secret_privacy_recall_minimum")
+    privacy_recall = selected_runtime.get("privacy_coverage_recall_mean")
+    compatible_recall = selected_runtime.get(
+        "compatible_coverage_recall_mean"
     )
     card = "\n".join(
         [
@@ -141,15 +221,23 @@ def write_artifact_metadata(
             f"- SHA-256: `{report['output_sha256']}`",
             f"- Opset: {args.opset}",
             f"- Training epochs represented: {epochs}",
+            f"- Runtime thresholds: `{operational_thresholds['path']}`",
+            f"- Runtime profile SHA-256: `{operational_thresholds['threshold_profile_sha256']}`",
             "- Quantization: gated; FP32 remains the only exported artifact",
             "",
-            "## Smoke metrics",
+            "## Operational selection metrics",
+            "",
+            f"- Mean privacy coverage: {float(privacy_recall or 0.0):.6f}",
+            f"- Mean class-compatible coverage: {float(compatible_recall or 0.0):.6f}",
+            f"- Minimum secret privacy coverage: {float(secret_recall or 0.0):.6f}",
+            "- Metric basis: calibrated per-class thresholds with PLVA top-1, padding, and NMS",
+            "",
+            "## Framework diagnostics (not checkpoint-selection metrics)",
             "",
             f"- mAP50: {float(metrics.get('metrics/mAP50(B)', 0.0)):.6f}",
             f"- mAP50-95: {float(metrics.get('metrics/mAP50-95(B)', 0.0)):.6f}",
             f"- Precision: {float(metrics.get('metrics/precision(B)', 0.0)):.6f}",
             f"- Recall: {float(metrics.get('metrics/recall(B)', 0.0)):.6f}",
-            f"- Minimum secret-class recall: {float(secret_recall or 0.0):.6f}",
             "",
             "These measurements validate the training/export path only; they are not ",
             "release-quality evidence.",
@@ -177,7 +265,7 @@ def export(args: argparse.Namespace) -> dict[str, Any]:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     suffix = args.source.suffix.lower()
     report: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source": str(args.source),
         "source_sha256": sha256_file(args.source),
@@ -257,6 +345,12 @@ def export(args: argparse.Namespace) -> dict[str, Any]:
         raise ValueError(f"unsupported detector source: {args.source}")
 
     if report["output"] is not None:
+        report["operational_thresholds"] = stage_runtime_threshold_artifact(
+            args,
+            expected_checkpoint_sha256=_selected_checkpoint_sha256(
+                args, report["source_sha256"]
+            ),
+        )
         manifest_name, card_name = write_artifact_metadata(args, report, destination)
         report["artifact_manifest"] = manifest_name
         report["model_card"] = card_name
@@ -276,6 +370,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--source-license", default="NOASSERTION")
     parser.add_argument("--training-manifest", type=Path)
+    parser.add_argument(
+        "--runtime-thresholds",
+        type=Path,
+        help="checkpoint-bound safety-best-thresholds.json from training",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--image-size", type=int, default=640)
     parser.add_argument("--opset", type=int, default=17)

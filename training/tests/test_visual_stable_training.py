@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,8 @@ from training.visual.training_attempt import (
     initialize_seeded_attempt,
     load_seeded_attempt,
     resolve_frozen_seed,
+    seeded_attempt_start_mode,
+    validate_seeded_attempt_invocation,
 )
 
 
@@ -205,6 +208,22 @@ class ConstrainedSafetySelectionTests(unittest.TestCase):
 
 
 class FrozenSeedAttemptTests(unittest.TestCase):
+    @staticmethod
+    def _staged_metadata(root: Path) -> dict[str, str]:
+        stage = root / "local-stage"
+        stage.mkdir()
+        values = {
+            "dataset_yaml": stage / "dataset.yaml",
+            "source_manifest": stage / "source-manifest.json",
+            "staging_manifest": stage / "staging-manifest.json",
+            "replay_manifest": stage / "replay-manifest.json",
+            "replay_train_list": stage / "replay-list.txt",
+            "runtime_selection_contract": stage / "selection.json",
+        }
+        for index, path in enumerate(values.values()):
+            path.write_text(f"stage-{index}\n", encoding="utf-8")
+        return {name: str(path) for name, path in values.items()}
+
     def test_attempt_paths_are_isolated(self) -> None:
         root = Path("/vol/runs/example")
         self.assertEqual(attempt_output_dir(root, "default"), root / "visual/training")
@@ -288,6 +307,203 @@ class FrozenSeedAttemptTests(unittest.TestCase):
                     license_path=license_path,
                 )
             self.assertFalse(attempt.exists())
+
+    def test_pre_epoch_attempt_atomically_binds_stage_and_restarts_from_seed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            snapshots = root / "snapshots"
+            snapshots.mkdir()
+            seed = snapshots / "seed.pt"
+            seed.write_bytes(b"seed-checkpoint")
+            license_path = root / "license.txt"
+            license_path.write_text("AGPL-3.0-only\n", encoding="utf-8")
+            stage = self._staged_metadata(root)
+            attempt_root = root / "runs/run/visual/training-safe"
+            provenance = {"snapshot": "safe", "purpose": "test"}
+
+            attempt = initialize_seeded_attempt(
+                attempt_root=attempt_root,
+                run_id="run",
+                attempt_id="safe",
+                source_checkpoint=seed,
+                expected_sha256=sha256_file(seed),
+                seed_provenance=provenance,
+                optimizer_policy=STABLE_OPTIMIZER_POLICY,
+                license_path=license_path,
+                staged_metadata=stage,
+            )
+
+            self.assertEqual(
+                seeded_attempt_start_mode(attempt_root, attempt),
+                "fresh-from-seed",
+            )
+            self.assertEqual(
+                set(attempt["staged_metadata"]),
+                {
+                    f"{name}_{field}"
+                    for name in stage
+                    for field in ("path", "sha256")
+                },
+            )
+            validate_seeded_attempt_invocation(
+                attempt,
+                source_checkpoint=seed,
+                expected_sha256=sha256_file(seed),
+                seed_provenance=provenance,
+            )
+
+            (attempt_root / "safety-selection-progress.json").write_text(
+                json.dumps({"schema_version": 4}), encoding="utf-8"
+            )
+            self.assertEqual(
+                seeded_attempt_start_mode(attempt_root, attempt), "resume"
+            )
+
+    def test_pre_epoch_recovery_rejects_mutable_or_mismatched_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            snapshots = root / "snapshots"
+            snapshots.mkdir()
+            seed = snapshots / "seed.pt"
+            seed.write_bytes(b"seed-checkpoint")
+            license_path = root / "license.txt"
+            license_path.write_text("AGPL-3.0-only\n", encoding="utf-8")
+            attempt_root = root / "runs/run/visual/training-safe"
+            attempt = initialize_seeded_attempt(
+                attempt_root=attempt_root,
+                run_id="run",
+                attempt_id="safe",
+                source_checkpoint=seed,
+                expected_sha256=sha256_file(seed),
+                seed_provenance={"snapshot": "safe"},
+                optimizer_policy=STABLE_OPTIMIZER_POLICY,
+                license_path=license_path,
+                staged_metadata=self._staged_metadata(root),
+            )
+
+            (attempt_root / "ultralytics-run").mkdir()
+            with self.assertRaisesRegex(RuntimeError, "disposable training"):
+                seeded_attempt_start_mode(attempt_root, attempt)
+            (attempt_root / "ultralytics-run").rmdir()
+
+            with self.assertRaisesRegex(RuntimeError, "fresh invocation"):
+                validate_seeded_attempt_invocation(
+                    attempt,
+                    source_checkpoint=seed,
+                    expected_sha256=sha256_file(seed),
+                    seed_provenance={"snapshot": "different"},
+                )
+
+            provenance_path = attempt_root / "frozen-seed-provenance.json"
+            document = json.loads(provenance_path.read_text(encoding="utf-8"))
+            document["declared_provenance"] = {"snapshot": "tampered"}
+            provenance_path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "provenance bytes changed"):
+                load_seeded_attempt(
+                    attempt_root=attempt_root,
+                    run_id="run",
+                    attempt_id="safe",
+                    optimizer_policy=STABLE_OPTIMIZER_POLICY,
+                    license_path=license_path,
+                )
+
+    def test_pre_epoch_recovery_discards_only_verified_seed_audit_outputs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            snapshots = root / "snapshots"
+            snapshots.mkdir()
+            seed = snapshots / "seed.pt"
+            seed.write_bytes(b"seed-checkpoint")
+            license_path = root / "license.txt"
+            license_path.write_text("AGPL-3.0-only\n", encoding="utf-8")
+            attempt_root = root / "runs/run/visual/training-safe"
+            attempt = initialize_seeded_attempt(
+                attempt_root=attempt_root,
+                run_id="run",
+                attempt_id="safe",
+                source_checkpoint=seed,
+                expected_sha256=sha256_file(seed),
+                seed_provenance={"snapshot": "safe"},
+                optimizer_policy=STABLE_OPTIMIZER_POLICY,
+                license_path=license_path,
+                staged_metadata=self._staged_metadata(root),
+            )
+            disposable = [
+                attempt_root / "runtime-selection-evaluation",
+                attempt_root / "frozen-base-webpii-test",
+                attempt_root / "frozen-base-supplemental-test",
+            ]
+            for directory in disposable:
+                directory.mkdir()
+                (directory / "audit.json").write_text("{}\n", encoding="utf-8")
+            for name in (
+                "safety-best.pt",
+                "safety-best-thresholds.json",
+                "seed-incumbent.json",
+                "supplemental-test.yaml",
+            ):
+                path = attempt_root / name
+                path.write_text("pre-epoch\n", encoding="utf-8")
+                disposable.append(path)
+
+            self.assertEqual(
+                seeded_attempt_start_mode(
+                    attempt_root,
+                    attempt,
+                    discard_pre_epoch_outputs=True,
+                ),
+                "fresh-from-seed",
+            )
+            self.assertTrue(all(not path.exists() for path in disposable))
+            self.assertEqual(
+                sha256_file(attempt_root / "frozen-seed.pt"),
+                attempt["checkpoint_sha256"],
+            )
+
+    def test_pre_epoch_recovery_refuses_checkpoint_or_epoch_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            snapshots = root / "snapshots"
+            snapshots.mkdir()
+            seed = snapshots / "seed.pt"
+            seed.write_bytes(b"seed-checkpoint")
+            license_path = root / "license.txt"
+            license_path.write_text("AGPL-3.0-only\n", encoding="utf-8")
+            attempt_root = root / "runs/run/visual/training-safe"
+            attempt = initialize_seeded_attempt(
+                attempt_root=attempt_root,
+                run_id="run",
+                attempt_id="safe",
+                source_checkpoint=seed,
+                expected_sha256=sha256_file(seed),
+                seed_provenance={"snapshot": "safe"},
+                optimizer_policy=STABLE_OPTIMIZER_POLICY,
+                license_path=license_path,
+                staged_metadata=self._staged_metadata(root),
+            )
+            weights = attempt_root / "ultralytics-run/weights"
+            weights.mkdir(parents=True)
+            (weights / "last.pt").write_bytes(b"optimizer-checkpoint")
+            with self.assertRaisesRegex(RuntimeError, "checkpoint or optimizer"):
+                seeded_attempt_start_mode(
+                    attempt_root,
+                    attempt,
+                    discard_pre_epoch_outputs=True,
+                )
+
+            (weights / "last.pt").unlink()
+            results = attempt_root / "ultralytics-run/results.csv"
+            results.write_text("epoch,loss\n0,1.0\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "epoch history"):
+                seeded_attempt_start_mode(
+                    attempt_root,
+                    attempt,
+                    discard_pre_epoch_outputs=True,
+                )
 
 
 if __name__ == "__main__":
