@@ -69,6 +69,17 @@ The optimized v10 visual + OCR + Rampart pipeline is packaged under
 `harness/plva-v3.zip`. It requires Node 20+ and local Chrome/Chromium, but no
 Python, `node_modules`, network, or Modal account at inference time:
 
+- [Download the complete v3 bundle](harness/plva-v3.zip) (77,596,477 bytes;
+  includes the visual detector, OCR, Rampart, CLI, and integrity manifests).
+- [Download only the v3 detector ONNX](harness/plva-v3/runtime/training/artifacts/plva-visual-agpl-ats-v3/visual-safe-head-v10/detector.onnx)
+  (10,428,657 bytes).
+
+Both v3 downloads are ordinary Git files and do not require Git LFS. The
+complete bundle SHA-256 is
+`7998e6153c3286820ea39401dea7c4c7256974bc4b7afcd81c6521611eddde53`; the
+detector SHA-256 is
+`2ed3f25c9bee375dc1683cf0ffa2044374b6bc35dd89a465a7dce6451ce8b928`.
+
 ```bash
 cd harness/plva-v3
 node bin/plva-v3.mjs screenshot.png \
