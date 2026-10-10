@@ -1,6 +1,6 @@
 # Runtime is pinned to Python 3.12 in Modal.
 accelerate==1.14.0
-datasets==5.0.0
+datasets==5.0.1
 huggingface-hub==1.23.0
 onnx==1.22.0
 onnxruntime==1.27.0
